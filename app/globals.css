@@ -1,0 +1,519 @@
+@font-face {
+  font-family: PublicSans;
+  src: url("../fonts/PublicSans.otf");
+}
+
+
+html {
+  padding: 0px;
+  margin: 0px;
+  background-color: #f4f6f8;
+}
+
+body {
+  padding: 0px;
+  margin: 0px;
+}
+
+.mainpage {
+  width: 100%;
+  height: 100%;
+  padding: 0px;
+  margin: 0px;
+}
+
+
+p {
+  font-family: PublicSans;
+  margin: 0px;
+}
+p.blue {
+  color: #2148c0;
+}
+p.white {
+  color: white;
+}
+p.gray {
+  color: #637381;
+}
+p.bold {
+  font-weight: bold;
+}
+p.small {
+  font-size: 16px;
+}
+p.medium {
+  font-size: 20px;
+}
+p.large {
+  font-size: 24px;
+}
+
+.vertical_text_center {
+  width: fit-content;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 
+==== LOGIN PAGE START ====
+*/
+.login_page {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background-color: #2148c0;
+}
+.login_page-input_form {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  height: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+.login_page-input_form > img {
+  width: 160px;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 64px;
+}
+.login_page-input_form > input {
+  width: 100%;
+  height: 36px;
+  background-color: #2148c0 ;
+  border-radius: 0.4rem;
+  border: 1px solid white;
+  color: white;
+  font-family: PublicSans;
+  outline: none;
+  padding-left: 8px;
+  font-size: 16px;
+  margin-bottom: 24px;
+}
+.login_page-input_form > input::placeholder {
+  color: lightgray;
+}
+.login_page-input_form-login_button {
+  width: calc(100% + 12px);
+  height: 36px;
+  border: 0px;
+  background-color: white;
+  border-radius: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.login_page-input_form-login_button:hover {
+  opacity: 0.7;
+}
+.login_page-input_form-forgot_password_text_container {
+  width: calc(100% + 12px);
+  height: fit-content;
+  display: flex;
+  flex-direction: row;
+  justify-content: end;
+  margin-top: 6px;
+}
+.login_page-input_form-forgot_password_text_container > p {
+  cursor: pointer;
+}
+.login_page-input_form-forgot_password_text_container > p:hover {
+  text-decoration: underline;
+}
+/* 
+==== LOGIN PAGE END ====
+*/
+
+
+/* 
+==== ADMIN OWNER PAGE START ====
+*/
+.admin-owner_page {
+  width: 100%;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 15% 85%;
+}
+.admin-owner_page-nav_column {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.admin-owner_page-nav_column-logo {
+  width: 30%;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 64px;
+  margin-bottom: 64px;
+}
+.admin-owner_page-nav_column-nav_button {
+  width: calc(100% - 1rem);
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  border-radius: 0.5rem;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: 0.3s;
+  margin-left: auto;
+  margin-right: auto;
+}
+.admin-owner_page-nav_column-nav_button:hover {
+  opacity: 0.7;
+}
+.admin-owner_page-nav_column-nav_button.red {
+  background-color: #fab9b9;
+}
+.admin-owner_page-nav_column-nav_button.green {
+  background-color: #b4ffd9;
+}
+.admin-owner_page-nav_column-nav_button.gray {
+  background-color: #c4cbd2;
+}
+
+.admin-owner_page-nav_column-logout_button {
+  position: absolute;
+  bottom: 1rem;
+  top: auto;
+  width: calc(100% - 1rem);
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  border-radius: 0.5rem;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: 0.3s;
+  margin-left: auto;
+  margin-right: auto;
+}
+.admin-owner_page-nav_column-logout_button:hover {
+  opacity: 0.7;
+}
+
+.admin-owner_page-files_area {
+  width: 100%;
+  height: 100vh;
+  background-color: #f6f7fb;
+  overflow-y: scroll;
+}
+.admin-owner_page-files_area-columns_seperator {
+  width: 90%;
+  height: calc(100vh - 96px);
+  margin-top: 96px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.admin-owner_page-files_area-columns_seperator-left_side {
+  width: 60%;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner {
+  width: 100%;
+  height: 300px;
+  background-color: #d7f5e8;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table {
+  width: 100%;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  border-radius: 1rem;
+  margin-top: 64px;
+  box-shadow: 0px 12px 24px -4px hsla(210, 13%, 62%, 0.12);
+  padding-bottom: 1rem;
+  margin-bottom: 64px;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row {
+  width: 100%;
+  height: 64px;
+  background-color: #f4f6f8;
+  display: grid;
+  grid-template-columns: 18.66% 18.66% 18.66% 18.66% 18.66% 6.66%;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column {
+  width: 100%;
+  height: 100%;
+  padding-left: 1rem;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-single_rechnung_row {
+  width: 100%;
+  height: 64px;
+  border-bottom: 1px solid lightgray;
+  display: grid;
+  grid-template-columns: 18.66% 18.66% 18.66% 18.66% 18.66% 6.66%;
+}
+.prufung_status-container_div {
+  width: fit-content;
+  height: fit-content;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  background-color: #d5f4e7;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+.genehmigte_status-container_div {
+  width: fit-content;
+  height: fit-content;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  background-color: #ffe4de;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.admin-owner_page-files_area-columns_seperator-right_side {
+  width: 35%;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+}
+.admin-owner_page-files_area-columns_seperator-right_side-genehmigte_card {
+  width: 100%;
+  height: 160px;
+  border-radius: 1rem;
+  background-color: #007867;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+.admin-owner_page-files_area-columns_seperator-right_side-zurprufung_card {
+  width: 100%;
+  height: 160px;
+  border-radius: 1rem;
+  background-color: #006c9c;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+.admin-owner_page-files_area-columns_seperator-right_side-documents_card {
+  width: 100%;
+  height: 160px;
+  border-radius: 1rem;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 32px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.admin-owner_page-files_area-columns_seperator-right_side-documents_card:hover {
+  background-color: lightgray;
+}
+/* 
+==== ADMIN OWNER PAGE END ====
+*/
+
+
+.admin-owner_page-file_upload_form-container {
+  width: 100%;
+  height: 400px;
+  background-color: white;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.admin-owner_page-file_upload_form-container-input_form_area {
+  width: 65%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.admin-owner_page-file_upload_form-container-input_form_area-rechnungsinformationen_title {
+  width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+  height: 36px;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid #2148c0;
+  margin-bottom: 2rem;
+}
+.admin-owner_page-file_upload_form-container-input_form_area-inputs_row {
+  width: 90%;
+  height: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+.admin-owner_page-file_upload_form-container-input_form_area-inputs_row > input {
+  width: 45%;
+  height: 44px;
+  font-size: 24px;
+  font-family: PublicSans;
+  border-radius: 22px;
+  border: 1px solid lightgray;
+  padding-left: 2rem;
+}
+
+.admin-owner_page-file_upload_form-container-input_form_area-singe_input {
+  width: 88%;
+  margin-left: auto;
+  margin-right: auto;
+  height: 44px;
+  font-size: 24px;
+  font-family: PublicSans;
+  border-radius: 22px;
+  border: 1px solid lightgray;
+  padding-left: 1rem;
+}
+
+.admin-owner_page-file_upload_form-container-vertical_spacer {
+  width: 1px;
+  height: 80%;
+  background-color: lightgray;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.admin-owner_page-file_upload_form-container-file_upload_area {
+  width: 30%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.admin-owner_page-file_upload_form-container-file_upload_area-upload_button {
+  width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+  height: 32px;
+  background-color: #2970ff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  border-radius: 16px;
+  margin-bottom: 32px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.admin-owner_page-file_upload_form-container-file_upload_area-upload_button:hover {
+  opacity: 0.8;
+}
+
+.admin-owner_page-file_upload_form-container-file_upload_area-file_input {
+  width: 90%;
+  height: 60%;
+  background-color: #f9fafa;
+  border-radius: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.admin-owner_page-file_upload_form-container-bottom_right_send_button-container {
+  width: 100%;
+  height: fit-content;
+  display: flex;
+  flex-direction: row;
+  justify-content: end;
+}
+.admin-owner_page-file_upload_form-container-bottom_right_send_button-container-button {
+  width: fit-content;
+  height: fit-content;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  border: 2px solid #2970ff;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  transition: 0.4s;
+}
+.admin-owner_page-file_upload_form-container-bottom_right_send_button-container-button:hover {
+  background-color: #2970ff;
+}
+.admin-owner_page-file_upload_form-container-bottom_right_send_button-container-button:hover > p {
+  color: white;
+}
+
+
+.admin-owner_page-files_area-columns_seperator-left_side-time_filtering_card {
+  width: 100%;
+  height: 120px;
+  background-color: white;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-time_filtering_card-month_select {
+  width: fit-content;
+  height: 32px;
+  font-size: 20px;
+  font-family: PublicSans;
+  padding-right: 1.5rem;
+  margin-left: 2rem;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: 1px solid #c4cbd2;
+  background-color: white;
+  cursor: pointer;
+  outline: none;
+  margin-top: 0.5rem;
+}
+
+
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column-confirm_invoice_button {
+  width: fit-content;
+  height: fit-content;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  background-color: #d5f4e7;
+  margin-top: auto;
+  margin-bottom: auto;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column-confirm_invoice_button:hover {
+  opacity: 0.7;
+}
+
+
+.admin-owner_page-files_area-columns_seperator-left_side-approved_file_upload-container {
+  width: 100%;
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  border-radius: 1rem;
+  margin-top: 0.5rem;
+}
