@@ -5,16 +5,12 @@ Source :
 https://github.com/vercel/next.js/blob/canary/examples/with-mongodb-mongoose/utils/dbConnect.js 
 **/
 
-
-// const MONGODB_URI = process.env.MONGODB_URI
-const MONGODB_URI = "mongodb+srv://adakcelinawork:azTKcDFm0DOgPPmC@destanirechnung.fnlevpf.mongodb.net/?retryWrites=true&w=majority&appName=destanirechnung";
-// const MONGODB_URI = "mongodb://localhost:27017/destanirechnung";
-
+const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
   throw new Error(
-    'Please define the MONGODB_URI environment variable inside .env.local'
-  )
+    "Please define the MONGODB_URI environment variable inside .env.local",
+  );
 }
 
 /**
@@ -22,29 +18,29 @@ if (!MONGODB_URI) {
  * in development. This prevents connections growing exponentially
  * during API Route usage.
  */
-let cached = global.mongoose
+let cached = global.mongoose;
 
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null }
+  cached = global.mongoose = { conn: null, promise: null };
 }
 
 async function dbConnect() {
   if (cached.conn) {
-    return cached.conn
+    return cached.conn;
   }
 
   if (!cached.promise) {
     const opts = {
       useUnifiedTopology: true,
-      bufferCommands: false
-    }
+      bufferCommands: false,
+    };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then(mongoose => {
-      return mongoose
-    })
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      return mongoose;
+    });
   }
-  cached.conn = await cached.promise
-  return cached.conn
+  cached.conn = await cached.promise;
+  return cached.conn;
 }
 
-export default dbConnect
+export default dbConnect;
