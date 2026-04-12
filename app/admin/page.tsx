@@ -1,63 +1,64 @@
-"use client"
-import { AdminOwnerPageNavColumn, SingleRechnungRow } from '@/components'
-import React, { useEffect, useState } from 'react'
+"use client";
+import { AdminOwnerPageNavColumn } from "@/components";
+import Link from "next/link";
+import React, { useEffect, useRef, useState } from "react";
 
 const page = () => {
-
   const [dashboardInvoices, setDashboardInvoices] = useState<Array<any>>([]);
-
-  const [allInvoicesCount, setAllInvoicesCount] = useState<string>("");
-  const [approvedInvoicesCount, setApprovedInvoicesCount] = useState<string>("");
+  const [approvedInvoicesCount, setApprovedInvoicesCount] =
+    useState<string>("");
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState<string>("");
-
-
   let [invoicesPageState, setInvoicesPageState] = useState<number>(2);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState("7d");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
+  const mainRef = useRef<HTMLDivElement>(null);
+
   const loadDashboardInvoices = async () => {
-      try {
-      const response = await fetch(`/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=1`);
+    try {
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=1`,
+      );
       const json_res = await response.json();
-
       if (response.ok) {
-          console.log(json_res);
-          setDashboardInvoices(json_res.foundInvoices);
+        setDashboardInvoices(json_res.foundInvoices);
       } else {
-          alert(json_res.message);
+        alert(json_res.message);
       }
-      } catch (err) {
-        console.log(err);
-        alert("Network Connectivity Issues.");
-      }
-  }
-
-    const loadExtraDashboardInvoices = async () => {
-      // alert(invoicesPageState);
-      try {
-                // alert(invoicesPageState);
-
-        const response = await fetch(`/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${invoicesPageState}`);
-        const json_res = await response.json();
-
-      if (response.ok) {
-          console.log(json_res);
-          setDashboardInvoices(prev => [...prev, ...json_res.foundInvoices]);
-      } else {
-          alert(json_res.message);
-      }
-      } catch (err) {
-        console.log(err);
-        alert("Network Connectivity Issues.");
-      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
     }
+  };
 
+  const loadExtraDashboardInvoices = async () => {
+    try {
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${invoicesPageState}`,
+      );
+      const json_res = await response.json();
+      if (response.ok) {
+        setDashboardInvoices((prev) => [...prev, ...json_res.foundInvoices]);
+      } else {
+        alert(json_res.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
 
   const loadDashboardInvoicesCounts = async () => {
     try {
       const response = await fetch("/api/admin/invoicecounter");
       const json_res = await response.json();
-
       if (response.ok) {
-        setAllInvoicesCount(json_res.allInvoicesCount);
         setApprovedInvoicesCount(json_res.approvedInvoicesCount);
         setPendingInvoicesCount(json_res.pendingInvoicesCount);
       } else {
@@ -67,151 +68,341 @@ const page = () => {
       console.log(err);
       alert("Network Connectivity Issues.");
     }
-  }
+  };
 
+  const deleteInvoice = async (invoiceId: string) => {
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId }),
+      });
+      if (response.ok) {
+        setDashboardInvoices((prev) =>
+          prev.filter((inv) => inv._id !== invoiceId),
+        );
+        setOpenMenuId(null);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
 
   useEffect(() => {
     loadDashboardInvoices();
     loadDashboardInvoicesCounts();
   }, []);
 
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest(".dash-menu__trigger") ||
+        target.closest(".dash-menu__dropdown--fixed")
+      ) {
+        return;
+      }
+      setOpenMenuId(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
+
+  // Filtered invoices
+  const filteredInvoices = dashboardInvoices.filter((inv) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !inv.company?.toLowerCase().includes(q) &&
+        !inv.textId?.toLowerCase().includes(q)
+      )
+        return false;
+    }
+    if (activeFilter !== "all" && inv.createdOn) {
+      const diffMs = Date.now() - new Date(inv.createdOn).getTime();
+      const diffH = diffMs / (1000 * 60 * 60);
+      if (activeFilter === "24h" && diffH > 24) return false;
+      if (activeFilter === "7d" && diffH > 168) return false;
+      if (activeFilter === "30d" && diffH > 720) return false;
+    }
+    return true;
+  });
+
+  const formatDate = (d: string) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const formatPrice = (p: number) =>
+    new Intl.NumberFormat("de-DE", {
+      style: "currency",
+      currency: "EUR",
+    }).format(p || 0);
+
+  const toggleId = (id: string) => {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filteredInvoices.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredInvoices.map((i) => i._id)));
+    }
+  };
+
   return (
-    <div className='mainpage'>
-      <div className="admin-owner_page">
+    <div className="dash-layout">
+      <AdminOwnerPageNavColumn activePage="dashboard" />
 
-        <AdminOwnerPageNavColumn />
+      <main className="dash-main" ref={mainRef}>
+        {/* Top bar */}
+        <div className="dash-topbar">
+          <div className="dash-search">
+            <i className="fa-solid fa-magnifying-glass dash-search__icon"></i>
+            <input
+              type="text"
+              className="dash-search__input"
+              placeholder="Suchen"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Link href="/admin/pendingapproval" className="dash-new-btn">
+            + Neue Rechnung
+          </Link>
+        </div>
 
-        <div className="admin-owner_page-files_area">
+        {/* Stat cards */}
+        <div className="dash-cards">
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/pendingapproval")}
+          >
+            <p className="dash-card__title">Rechnungen zur Prüfung</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{pendingInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
+          </div>
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/approved")}
+          >
+            <p className="dash-card__title">Genehmigte Rechnungen</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{approvedInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
+          </div>
+        </div>
 
-          <div className="admin-owner_page-files_area-columns_seperator">
+        {/* Table section */}
 
-            <div className="admin-owner_page-files_area-columns_seperator-left_side">
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner">
-                <p className="large bold" style={{
-                  marginTop: "2rem",
-                  marginLeft: "2rem",
-                  color: "#004b50"
-                }}>Herzlioch willkommen</p>
-                <p className="medium" style={{
-                  marginTop: "2rem",
-                  marginLeft: "2rem",
-                  color: "#2c6d6f"
-                }}>
-                  Klicken Sie auf die Schaltfläche unten,<br/>
-                  um Rechnungen hochzuladen.
-                </p>
-              </div>
+        <div className="dash-section__header">
+          <h2 className="dash-section__title">
+            Rechnungen zur Prüfung
+            <span className="dash-section__badge">
+              {pendingInvoicesCount || "0"}
+            </span>
+          </h2>
+          <p className="dash-section__subtitle">Rechnungsübersicht</p>
+        </div>
 
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table">
-                <p className="medium bold" style={{
-                  marginTop: "1rem",
-                  marginLeft: "1rem",
-                  marginBottom: "1rem"
-                }}>Übersicht</p>
-
-                <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row">
-                  
-                  <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                    <div className="vertical_text_center">
-                      <p className="small gray">ID</p>
-                    </div>
-                  </div>
-
-                  <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                    <div className="vertical_text_center">
-                      <p className="small gray">Firma</p>
-                    </div>
-                  </div>
-
-                  <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                    <div className="vertical_text_center">
-                      <p className="small gray">Preis</p>
-                    </div>
-                  </div>
-
-                  <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                    <div className="vertical_text_center">
-                      <p className="small gray">Status</p>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Invoices scroller */}
-                {dashboardInvoices.map((singleDashboardInvoice: any) => (
-                  <SingleRechnungRow
-                      invoiceId={singleDashboardInvoice._id}
-                      textId={singleDashboardInvoice.textId}
-                      invoiceCompany={singleDashboardInvoice.company}
-                      price={singleDashboardInvoice.price}
-                      status={singleDashboardInvoice.status}
-                      pageId='dashboard'
-                      invoiceFile={singleDashboardInvoice.fileName}
-                  />
+        <div className="dash-filters">
+          {[
+            { label: "24 Stunde", value: "24h" },
+            { label: "7 Tage", value: "7d" },
+            { label: "30 Tage", value: "30d" },
+            { label: "Alle", value: "all" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              className={`dash-filter ${activeFilter === f.value ? "dash-filter--active" : ""}`}
+              onClick={() => setActiveFilter(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="dash-section">
+          <div className="dash-table-wrap">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th className="dash-th dash-th--cb">
+                    <label className="dash-cb">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredInvoices.length > 0 &&
+                          selectedIds.size === filteredInvoices.length
+                        }
+                        onChange={toggleAll}
+                      />
+                      <span className="dash-cb__box"></span>
+                    </label>
+                  </th>
+                  <th className="dash-th">Kunde</th>
+                  <th className="dash-th">
+                    Status{" "}
+                    <i
+                      className="fa-solid fa-arrow-down"
+                      style={{ fontSize: 11, marginLeft: 4 }}
+                    ></i>
+                  </th>
+                  <th className="dash-th">Id</th>
+                  <th className="dash-th">Preis</th>
+                  <th className="dash-th">Datum</th>
+                  <th className="dash-th dash-th--act"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInvoices.map((inv: any) => (
+                  <tr key={inv._id} className="dash-tr">
+                    <td className="dash-td dash-td--cb">
+                      <label className="dash-cb">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(inv._id)}
+                          onChange={() => toggleId(inv._id)}
+                        />
+                        <span className="dash-cb__box"></span>
+                      </label>
+                    </td>
+                    <td className="dash-td dash-td--kunde">
+                      <div className="dash-kunde">
+                        <i className="fa-regular fa-file-lines dash-kunde__icon"></i>
+                        <div>
+                          <Link
+                            href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                            target="_blank"
+                            className="dash-kunde__name"
+                          >
+                            {inv.company || "Name"}
+                          </Link>
+                          <p className="dash-kunde__id">{inv.textId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="dash-td">
+                      {inv.status === "pending" ? (
+                        <span className="dash-badge dash-badge--pending">
+                          Ausstehend
+                        </span>
+                      ) : inv.status === "approved" ? (
+                        <span className="dash-badge dash-badge--approved">
+                          Genehmigt
+                        </span>
+                      ) : inv.status === "paid" ? (
+                        <span className="dash-badge dash-badge--paid">
+                          Bezahlt
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="dash-td">{inv.textId}</td>
+                    <td className="dash-td">{formatPrice(inv.price)}</td>
+                    <td className="dash-td">{formatDate(inv.createdOn)}</td>
+                    <td className="dash-td dash-td--act">
+                      <div
+                        className="dash-menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          className="dash-menu__trigger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (openMenuId === inv._id) {
+                              setOpenMenuId(null);
+                            } else {
+                              const rect = (
+                                e.currentTarget as HTMLElement
+                              ).getBoundingClientRect();
+                              const menuWidth = 170;
+                              const padding = 8;
+                              const clampedLeft = Math.max(
+                                padding,
+                                Math.min(
+                                  rect.right - menuWidth,
+                                  window.innerWidth - menuWidth - padding,
+                                ),
+                              );
+                              setMenuPos({
+                                top: rect.bottom + 4,
+                                left: clampedLeft,
+                              });
+                              setOpenMenuId(inv._id);
+                            }
+                          }}
+                        >
+                          <i className="fa-solid fa-ellipsis-vertical"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-
-                <div style={{
-                  width: "100%",
-                  height: "64px",
-                  display: 'flex',
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  textAlign: "left"
-                }} onClick={() => {
-                  setInvoicesPageState(invoicesPageState+1);
-                  loadExtraDashboardInvoices();
-                  }}>
-                  <p style={{
-                    marginLeft: "1rem",
-                    cursor: "pointer"
-                  }} className="small bold">Alle Anzeigen</p>
-                </div>
-
-              </div>
-
-              
-            </div>
-
-            <div className="admin-owner_page-files_area-columns_seperator-right_side">
-
-
-              <div className="admin-owner_page-files_area-columns_seperator-right_side-genehmigte_card">
-                <p className="medium white bold" style={{
-                  marginLeft: "2rem",
-                  marginBottom: "0.5rem"
-                }}>{approvedInvoicesCount}</p>
-                <p className="small white" style={{
-                  marginLeft: "2rem"
-                }}>Genehmigte</p>
-              </div>
-
-              <div className="admin-owner_page-files_area-columns_seperator-right_side-zurprufung_card">
-                <p className="medium white bold" style={{
-                  marginLeft: "2rem",
-                  marginBottom: "0.5rem"
-                }}>{pendingInvoicesCount}</p>
-                <p className="small white" style={{
-                  marginLeft: "2rem"
-                }}>Zur Prüfung</p>
-              </div>
-
-              <div className="admin-owner_page-files_area-columns_seperator-right_side-documents_card" onClick={() => window.location.href = "/admin/documents"}>
-                <p className="medium bold" style={{
-                  marginLeft: "2rem",
-                  marginBottom: "0.5rem"
-                }}>Documents</p>
-                <p className="small gray" style={{
-                  marginLeft: "2rem"
-                }}>{allInvoicesCount} Files</p>
-              </div>
-            </div>
-
+              </tbody>
+            </table>
           </div>
 
-        </div>
-      </div>
-    </div>
-  )
-}
+          {openMenuId &&
+            (() => {
+              const inv = dashboardInvoices.find((i) => i._id === openMenuId);
+              if (!inv) return null;
+              return (
+                <div
+                  className="dash-menu__dropdown dash-menu__dropdown--fixed"
+                  style={{ top: menuPos.top, left: menuPos.left }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Link
+                    href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                    target="_blank"
+                    className="dash-menu__item"
+                  >
+                    <i className="fa-regular fa-pen-to-square"></i> Bearbeiten
+                  </Link>
+                  <div
+                    className="dash-menu__item dash-menu__item--danger"
+                    onClick={() => deleteInvoice(inv._id)}
+                  >
+                    <i className="fa-regular fa-trash-can"></i> Löschen
+                  </div>
+                </div>
+              );
+            })()}
 
-export default page
+          <div
+            className="dash-load-more"
+            onClick={() => {
+              setInvoicesPageState(invoicesPageState + 1);
+              loadExtraDashboardInvoices();
+            }}
+          >
+            <p>Alle Anzeigen</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default page;

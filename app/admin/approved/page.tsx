@@ -1,17 +1,23 @@
 "use client";
-import { AdminOwnerPageNavColumn, SingleRechnungRow } from "@/components";
+import { AdminOwnerPageNavColumn } from "@/components";
+import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
 const page = () => {
   const [approvedInvoices, setApprovedInvoices] = useState<Array<any>>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
 
   const loadApprovedInvoices = async () => {
     try {
       const response = await fetch(`/api/admin/invoice?invoiceStatus=approved`);
       const json_res = await response.json();
-
       if (response.ok) {
-        console.log(json_res);
         setApprovedInvoices(json_res.foundInvoices);
       } else {
         alert(json_res.message);
@@ -24,7 +30,6 @@ const page = () => {
 
   const uploadedEditedFile = async () => {
     let editedFileUploadFormData = new FormData();
-
     const editedInvoiceFile = (document.getElementById(
       "editedinvoiceupload",
     ) as HTMLInputElement)!.files![0];
@@ -37,7 +42,6 @@ const page = () => {
         request_options,
       );
       const json_res = await response.json();
-
       if (response.ok) {
         window.location.reload();
       } else {
@@ -49,132 +53,279 @@ const page = () => {
     }
   };
 
+  const payInvoice = async (invoiceId: string) => {
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId, newStatus: "paid" }),
+      });
+      if (response.ok) {
+        setApprovedInvoices((prev) =>
+          prev.filter((inv) => inv._id !== invoiceId),
+        );
+        setOpenMenuId(null);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
+
+  const deleteInvoice = async (invoiceId: string) => {
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId }),
+      });
+      if (response.ok) {
+        setApprovedInvoices((prev) =>
+          prev.filter((inv) => inv._id !== invoiceId),
+        );
+        setOpenMenuId(null);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
+
   useEffect(() => {
     loadApprovedInvoices();
   }, []);
 
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest(".dash-menu__trigger") ||
+        target.closest(".dash-menu__dropdown--fixed")
+      )
+        return;
+      setOpenMenuId(null);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
+
+  const filteredInvoices = approvedInvoices.filter((inv) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      inv.company?.toLowerCase().includes(q) ||
+      inv.textId?.toLowerCase().includes(q)
+    );
+  });
+
+  const formatDate = (d: string) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const formatPrice = (p: number) =>
+    new Intl.NumberFormat("de-DE", {
+      style: "currency",
+      currency: "EUR",
+    }).format(p || 0);
+
+  const toggleId = (id: string) => {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filteredInvoices.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredInvoices.map((i) => i._id)));
+  };
+
   return (
-    <div className="mainpage">
-      <div
-        className="admin-owner_page"
-        style={{
-          backgroundColor: "#f6f7fb",
-        }}
-      >
-        <AdminOwnerPageNavColumn />
+    <div className="dash-layout">
+      <AdminOwnerPageNavColumn activePage="approved" />
 
-        <div
-          className="admin-owner_page-files_area-columns_seperator-left_side"
-          style={{
-            width: "80%",
-            marginLeft: "auto",
-            marginRight: "auto",
-            marginTop: "96px",
-          }}
-        >
-          {/* <div className="admin-owner_page-files_area-columns_seperator-left_side-time_filtering_card">
-              <p className="small" style={{
-                marginLeft: "2rem"
-              }}>Referenze Monat</p>
-              <select name="" id="" className='admin-owner_page-files_area-columns_seperator-left_side-time_filtering_card-month_select'>
-                <option value="all">All Time</option>
-                <option value="05-2025">05-2025</option>
-                <option value="04-2025">04-2025</option>
-                <option value="03-2025">03-2025</option>
-                <option value="02-2025">02-2025</option>
-                <option value="01-2025">01-2025</option>
-              </select>
-            </div> */}
-
-          <div className="admin-owner_page-files_area-columns_seperator-left_side-approved_file_upload-container">
-            <div
-              className="admin-owner_page-file_upload_form-container-file_upload_area"
-              style={{
-                width: "100%",
-              }}
-            >
-              <label
-                className="admin-owner_page-file_upload_form-container-file_upload_area-upload_button"
-                htmlFor="editedinvoiceupload"
-                style={{
-                  width: "240px",
-                  marginLeft: "2rem",
-                }}
-              >
-                <p className="white">Hochladen</p>
-              </label>
-              <input
-                type="file"
-                style={{
-                  width: "calc(100% - 4rem)",
-                  marginLeft: "2rem",
-                  borderRadius: "0.5rem",
-                }}
-                name=""
-                id="editedinvoiceupload"
-                className="admin-owner_page-file_upload_form-container-file_upload_area-file_input"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    uploadedEditedFile();
-                  }
-                }}
-              />
-            </div>
+      <main className="dash-main">
+        {/* Top bar */}
+        <div className="dash-topbar">
+          <div className="dash-search">
+            <i className="fa-solid fa-magnifying-glass dash-search__icon"></i>
+            <input
+              type="text"
+              className="dash-search__input"
+              placeholder="Suchen"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
-
-          <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table">
-            <p
-              className="medium bold"
-              style={{
-                marginTop: "1rem",
-                marginLeft: "1rem",
-                marginBottom: "1rem",
-              }}
-            >
-              Übersicht
-            </p>
-
-            <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row">
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                <div className="vertical_text_center">
-                  <p className="small gray">ID</p>
-                </div>
-              </div>
-
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                <div className="vertical_text_center">
-                  <p className="small gray">Firma</p>
-                </div>
-              </div>
-
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                <div className="vertical_text_center">
-                  <p className="small gray">Preis</p>
-                </div>
-              </div>
-
-              <div className="admin-owner_page-files_area-columns_seperator-left_side-welcome_banner-overview_table-title_row-column">
-                <div className="vertical_text_center">
-                  <p className="small gray">Status</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Invoices scroller */}
-            {approvedInvoices.map((singlePendingInvoice: any) => (
-              <SingleRechnungRow
-                invoiceId={singlePendingInvoice._id}
-                textId={singlePendingInvoice.textId}
-                invoiceCompany={singlePendingInvoice.company}
-                price={singlePendingInvoice.price}
-                status={singlePendingInvoice.status}
-                pageId="approved"
-                invoiceFile={singlePendingInvoice.fileName}
-              />
-            ))}
-          </div>
+          <label className="dash-upload-btn" htmlFor="editedinvoiceupload">
+            <i className="fa-solid fa-cloud-arrow-up"></i> Datei hochladen
+          </label>
+          <input
+            type="file"
+            id="editedinvoiceupload"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) uploadedEditedFile();
+            }}
+          />
         </div>
-      </div>
+
+        {/* Table section */}
+        <div className="dash-section__header">
+          <h2 className="dash-section__title">
+            Genehmigte Rechnungen
+            <span className="dash-section__badge">
+              {approvedInvoices.length}
+            </span>
+          </h2>
+          <p className="dash-section__subtitle">Rechnungsübersicht</p>
+        </div>
+
+        <div className="dash-section">
+          <div className="dash-table-wrap">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th className="dash-th dash-th--cb">
+                    <label className="dash-cb">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredInvoices.length > 0 &&
+                          selectedIds.size === filteredInvoices.length
+                        }
+                        onChange={toggleAll}
+                      />
+                      <span className="dash-cb__box"></span>
+                    </label>
+                  </th>
+                  <th className="dash-th">Kunde</th>
+                  <th className="dash-th">Status</th>
+                  <th className="dash-th">Id</th>
+                  <th className="dash-th">Preis</th>
+                  <th className="dash-th">Datum</th>
+                  <th className="dash-th dash-th--act"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInvoices.map((inv: any) => (
+                  <tr key={inv._id} className="dash-tr">
+                    <td className="dash-td dash-td--cb">
+                      <label className="dash-cb">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(inv._id)}
+                          onChange={() => toggleId(inv._id)}
+                        />
+                        <span className="dash-cb__box"></span>
+                      </label>
+                    </td>
+                    <td className="dash-td dash-td--kunde">
+                      <div className="dash-kunde">
+                        <i className="fa-regular fa-file-lines dash-kunde__icon"></i>
+                        <div>
+                          <Link
+                            href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                            target="_blank"
+                            className="dash-kunde__name"
+                          >
+                            {inv.company || "Name"}
+                          </Link>
+                          <p className="dash-kunde__id">{inv.textId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="dash-td">
+                      <span className="dash-badge dash-badge--approved">
+                        Genehmigt
+                      </span>
+                    </td>
+                    <td className="dash-td">{inv.textId}</td>
+                    <td className="dash-td">{formatPrice(inv.price)}</td>
+                    <td className="dash-td">{formatDate(inv.createdOn)}</td>
+                    <td className="dash-td dash-td--act">
+                      <div
+                        className="dash-menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          className="dash-menu__trigger"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (openMenuId === inv._id) {
+                              setOpenMenuId(null);
+                            } else {
+                              const rect = (
+                                e.currentTarget as HTMLElement
+                              ).getBoundingClientRect();
+                              setMenuPos({
+                                top: rect.bottom + 4,
+                                left: Math.min(
+                                  rect.right - 170,
+                                  window.innerWidth - 178,
+                                ),
+                              });
+                              setOpenMenuId(inv._id);
+                            }
+                          }}
+                        >
+                          <i className="fa-solid fa-ellipsis-vertical"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {openMenuId &&
+            (() => {
+              const inv = approvedInvoices.find((i) => i._id === openMenuId);
+              if (!inv) return null;
+              return (
+                <div
+                  className="dash-menu__dropdown dash-menu__dropdown--fixed"
+                  style={{ top: menuPos.top, left: menuPos.left }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Link
+                    href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                    target="_blank"
+                    className="dash-menu__item"
+                  >
+                    <i className="fa-regular fa-pen-to-square"></i> Bearbeiten
+                  </Link>
+                  <div
+                    className="dash-menu__item"
+                    onClick={() => payInvoice(inv._id)}
+                  >
+                    <i className="fa-regular fa-credit-card"></i> Bezahle es
+                  </div>
+                  <div
+                    className="dash-menu__item dash-menu__item--danger"
+                    onClick={() => deleteInvoice(inv._id)}
+                  >
+                    <i className="fa-regular fa-trash-can"></i> Löschen
+                  </div>
+                </div>
+              );
+            })()}
+        </div>
+      </main>
     </div>
   );
 };
