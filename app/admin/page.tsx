@@ -12,7 +12,7 @@ const page = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [activeFilter, setActiveFilter] = useState("7d");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
     top: 0,
