@@ -151,18 +151,16 @@ const SingleRechnungRow = ({
               Genehmigte
             </p>
           </div>
-        ) : (
-          status === "paid" && (
-            <div className="prufung_status-container_div">
-              <p
-                className="small"
-                style={{ color: "#118d57", fontWeight: "bold" }}
-              >
-                Bezahlt
-              </p>
-            </div>
-          )
-        )}
+        ) : status === "paid" ? (
+          <div className="prufung_status-container_div">
+            <p
+              className="small"
+              style={{ color: "#118d57", fontWeight: "bold" }}
+            >
+              Bezahlt
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {pageId === "pendingapproval" && (

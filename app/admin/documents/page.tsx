@@ -5,24 +5,21 @@ import React, { useEffect, useState } from "react";
 
 const page = () => {
   const [documentsInvoices, setDocumentsInvoices] = useState<Array<any>>([]);
-  const [filteringMonthYearOptions, setFilteringMonthYearOptions] = useState<
-    Array<any>
-  >([]);
+  const [paidInvoicesCount, setPaidInvoicesCount] = useState<string>("");
+  const [approvedInvoicesCount, setApprovedInvoicesCount] =
+    useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState("7d");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
     top: 0,
     left: 0,
   });
 
-  const loadDocumentsInvoices = async (
-    filteringMonthYearOptionParam: string = "all",
-  ) => {
+  const loadDocumentsInvoices = async () => {
     try {
-      const response = await fetch(
-        `/api/admin/invoice?invoiceStatus=all&filteringMonthYearOptionParam=${filteringMonthYearOptionParam}`,
-      );
+      const response = await fetch(`/api/admin/invoice?invoiceStatus=all`);
       const json_res = await response.json();
       if (response.ok) {
         setDocumentsInvoices(json_res.foundInvoices.reverse());
@@ -35,14 +32,13 @@ const page = () => {
     }
   };
 
-  const loadInvoicesTimePeriods = async () => {
+  const loadDashboardInvoicesCounts = async () => {
     try {
-      const response = await fetch(
-        `/api/admin/invoicetimeperiods?invoiceStatus=paid`,
-      );
+      const response = await fetch("/api/admin/invoicecounter");
       const json_res = await response.json();
       if (response.ok) {
-        setFilteringMonthYearOptions(json_res.monthYearOptions);
+        setPaidInvoicesCount(json_res.paidInvoicesCount);
+        setApprovedInvoicesCount(json_res.approvedInvoicesCount);
       } else {
         alert(json_res.message);
       }
@@ -76,7 +72,7 @@ const page = () => {
 
   useEffect(() => {
     loadDocumentsInvoices();
-    loadInvoicesTimePeriods();
+    loadDashboardInvoicesCounts();
   }, []);
 
   useEffect(() => {
@@ -94,14 +90,30 @@ const page = () => {
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
-  const filteredInvoices = documentsInvoices.filter((inv) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      inv.company?.toLowerCase().includes(q) ||
-      inv.textId?.toLowerCase().includes(q)
-    );
-  });
+  const filteredInvoices = documentsInvoices
+    .filter((inv) => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (
+          !inv.company?.toLowerCase().includes(q) &&
+          !inv.textId?.toLowerCase().includes(q)
+        )
+          return false;
+      }
+      if (activeFilter !== "all" && inv.createdOn) {
+        const diffMs = Date.now() - new Date(inv.createdOn).getTime();
+        const diffH = diffMs / (1000 * 60 * 60);
+        if (activeFilter === "24h" && diffH > 24) return false;
+        if (activeFilter === "7d" && diffH > 168) return false;
+        if (activeFilter === "30d" && diffH > 720) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.status === "approved" && b.status !== "approved") return -1;
+      if (a.status !== "approved" && b.status === "approved") return 1;
+      return 0;
+    });
 
   const formatDate = (d: string) => {
     if (!d) return "—";
@@ -148,18 +160,36 @@ const page = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="dash-month-filter">
-            <select
-              className="dash-select"
-              onChange={(e) => loadDocumentsInvoices(e.target.value)}
-            >
-              <option value="all">Alle Zeiträume</option>
-              {filteringMonthYearOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+          <Link href="/admin/pendingapproval" className="dash-new-btn">
+            + Neue Rechnung
+          </Link>
+        </div>
+
+        {/* Stat cards */}
+        <div className="dash-cards">
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/paidinvoices")}
+          >
+            <p className="dash-card__title">Bezahlte Rechnungen</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{paidInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
+          </div>
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/approved")}
+          >
+            <p className="dash-card__title">Genehmigte Rechnungen</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{approvedInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -171,7 +201,24 @@ const page = () => {
               {documentsInvoices.length}
             </span>
           </h2>
-          <p className="dash-section__subtitle">Alle Rechnungen</p>
+          <p className="dash-section__subtitle">Dokumentenübersicht</p>
+        </div>
+
+        <div className="dash-filters">
+          {[
+            { label: "24 Stunde", value: "24h" },
+            { label: "7 Tage", value: "7d" },
+            { label: "30 Tage", value: "30d" },
+            { label: "Alle", value: "all" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              className={`dash-filter ${activeFilter === f.value ? "dash-filter--active" : ""}`}
+              onClick={() => setActiveFilter(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <div className="dash-section">
@@ -235,7 +282,7 @@ const page = () => {
                         </span>
                       ) : inv.status === "approved" ? (
                         <span className="dash-badge dash-badge--approved">
-                          Genehmigt
+                          Genehmigte
                         </span>
                       ) : inv.status === "paid" ? (
                         <span className="dash-badge dash-badge--paid">

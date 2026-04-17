@@ -5,8 +5,12 @@ import React, { useEffect, useState } from "react";
 
 const page = () => {
   const [approvedInvoices, setApprovedInvoices] = useState<Array<any>>([]);
+  const [approvedInvoicesCount, setApprovedInvoicesCount] =
+    useState<string>("");
+  const [pendingInvoicesCount, setPendingInvoicesCount] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState("7d");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({
     top: 0,
@@ -28,22 +32,13 @@ const page = () => {
     }
   };
 
-  const uploadedEditedFile = async () => {
-    let editedFileUploadFormData = new FormData();
-    const editedInvoiceFile = (document.getElementById(
-      "editedinvoiceupload",
-    ) as HTMLInputElement)!.files![0];
-    editedFileUploadFormData.append("files", editedInvoiceFile);
-
+  const loadDashboardInvoicesCounts = async () => {
     try {
-      let request_options = { method: "POST", body: editedFileUploadFormData };
-      const response = await fetch(
-        "/api/admin/uploadeditedfile",
-        request_options,
-      );
+      const response = await fetch("/api/admin/invoicecounter");
       const json_res = await response.json();
       if (response.ok) {
-        window.location.reload();
+        setApprovedInvoicesCount(json_res.approvedInvoicesCount);
+        setPendingInvoicesCount(json_res.pendingInvoicesCount);
       } else {
         alert(json_res.message);
       }
@@ -99,6 +94,7 @@ const page = () => {
 
   useEffect(() => {
     loadApprovedInvoices();
+    loadDashboardInvoicesCounts();
   }, []);
 
   useEffect(() => {
@@ -117,12 +113,22 @@ const page = () => {
   }, []);
 
   const filteredInvoices = approvedInvoices.filter((inv) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      inv.company?.toLowerCase().includes(q) ||
-      inv.textId?.toLowerCase().includes(q)
-    );
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !inv.company?.toLowerCase().includes(q) &&
+        !inv.textId?.toLowerCase().includes(q)
+      )
+        return false;
+    }
+    if (activeFilter !== "all" && inv.createdOn) {
+      const diffMs = Date.now() - new Date(inv.createdOn).getTime();
+      const diffH = diffMs / (1000 * 60 * 60);
+      if (activeFilter === "24h" && diffH > 24) return false;
+      if (activeFilter === "7d" && diffH > 168) return false;
+      if (activeFilter === "30d" && diffH > 720) return false;
+    }
+    return true;
   });
 
   const formatDate = (d: string) => {
@@ -170,17 +176,37 @@ const page = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <label className="dash-upload-btn" htmlFor="editedinvoiceupload">
-            <i className="fa-solid fa-cloud-arrow-up"></i> Datei hochladen
-          </label>
-          <input
-            type="file"
-            id="editedinvoiceupload"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) uploadedEditedFile();
-            }}
-          />
+          <Link href="/admin/pendingapproval" className="dash-new-btn">
+            + Neue Rechnung
+          </Link>
+        </div>
+
+        {/* Stat cards */}
+        <div className="dash-cards">
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/pendingapproval")}
+          >
+            <p className="dash-card__title">Rechnungen zur Prüfung</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{pendingInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
+          </div>
+          <div
+            className="dash-card"
+            onClick={() => (window.location.href = "/admin/approved")}
+          >
+            <p className="dash-card__title">Genehmigte Rechnungen</p>
+            <div className="dash-card__footer">
+              <p className="dash-card__count">{approvedInvoicesCount || "0"}</p>
+              <span className="dash-card__arrow">
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Table section */}
@@ -188,10 +214,27 @@ const page = () => {
           <h2 className="dash-section__title">
             Genehmigte Rechnungen
             <span className="dash-section__badge">
-              {approvedInvoices.length}
+              {approvedInvoicesCount || "0"}
             </span>
           </h2>
           <p className="dash-section__subtitle">Rechnungsübersicht</p>
+        </div>
+
+        <div className="dash-filters">
+          {[
+            { label: "24 Stunde", value: "24h" },
+            { label: "7 Tage", value: "7d" },
+            { label: "30 Tage", value: "30d" },
+            { label: "Alle", value: "all" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              className={`dash-filter ${activeFilter === f.value ? "dash-filter--active" : ""}`}
+              onClick={() => setActiveFilter(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <div className="dash-section">
@@ -250,7 +293,7 @@ const page = () => {
                     </td>
                     <td className="dash-td">
                       <span className="dash-badge dash-badge--approved">
-                        Genehmigt
+                        Genehmigte
                       </span>
                     </td>
                     <td className="dash-td">{inv.textId}</td>

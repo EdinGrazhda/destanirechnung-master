@@ -70,6 +70,31 @@ const page = () => {
     }
   };
 
+  const approveInvoice = async (invoiceId: string) => {
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId, newStatus: "approved" }),
+      });
+      if (response.ok) {
+        setDashboardInvoices((prev) =>
+          prev.map((inv) =>
+            inv._id === invoiceId ? { ...inv, status: "approved" } : inv,
+          ),
+        );
+        setOpenMenuId(null);
+        loadDashboardInvoicesCounts();
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
+
   const deleteInvoice = async (invoiceId: string) => {
     try {
       const response = await fetch("/api/admin/invoice", {
@@ -115,24 +140,30 @@ const page = () => {
   }, []);
 
   // Filtered invoices
-  const filteredInvoices = dashboardInvoices.filter((inv) => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      if (
-        !inv.company?.toLowerCase().includes(q) &&
-        !inv.textId?.toLowerCase().includes(q)
-      )
-        return false;
-    }
-    if (activeFilter !== "all" && inv.createdOn) {
-      const diffMs = Date.now() - new Date(inv.createdOn).getTime();
-      const diffH = diffMs / (1000 * 60 * 60);
-      if (activeFilter === "24h" && diffH > 24) return false;
-      if (activeFilter === "7d" && diffH > 168) return false;
-      if (activeFilter === "30d" && diffH > 720) return false;
-    }
-    return true;
-  });
+  const filteredInvoices = dashboardInvoices
+    .filter((inv) => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (
+          !inv.company?.toLowerCase().includes(q) &&
+          !inv.textId?.toLowerCase().includes(q)
+        )
+          return false;
+      }
+      if (activeFilter !== "all" && inv.createdOn) {
+        const diffMs = Date.now() - new Date(inv.createdOn).getTime();
+        const diffH = diffMs / (1000 * 60 * 60);
+        if (activeFilter === "24h" && diffH > 24) return false;
+        if (activeFilter === "7d" && diffH > 168) return false;
+        if (activeFilter === "30d" && diffH > 720) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.status === "approved" && b.status !== "approved") return -1;
+      if (a.status !== "approved" && b.status === "approved") return 1;
+      return 0;
+    });
 
   const formatDate = (d: string) => {
     if (!d) return "—";
@@ -219,9 +250,9 @@ const page = () => {
 
         <div className="dash-section__header">
           <h2 className="dash-section__title">
-            Rechnungen zur Prüfung
+            Genehmigte Rechnungen
             <span className="dash-section__badge">
-              {pendingInvoicesCount || "0"}
+              {approvedInvoicesCount || "0"}
             </span>
           </h2>
           <p className="dash-section__subtitle">Rechnungsübersicht</p>
@@ -310,7 +341,7 @@ const page = () => {
                         </span>
                       ) : inv.status === "approved" ? (
                         <span className="dash-badge dash-badge--approved">
-                          Genehmigt
+                          Genehmigte
                         </span>
                       ) : inv.status === "paid" ? (
                         <span className="dash-badge dash-badge--paid">
@@ -380,6 +411,12 @@ const page = () => {
                   >
                     <i className="fa-regular fa-pen-to-square"></i> Bearbeiten
                   </Link>
+                  <div
+                    className="dash-menu__item"
+                    onClick={() => approveInvoice(inv._id)}
+                  >
+                    <i className="fa-regular fa-circle-check"></i> Genehmigen
+                  </div>
                   <div
                     className="dash-menu__item dash-menu__item--danger"
                     onClick={() => deleteInvoice(inv._id)}
