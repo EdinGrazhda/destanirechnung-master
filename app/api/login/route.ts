@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createHash } from "crypto";
+import bcryptjs from "bcryptjs";
 import dbConnect from "@/utils/dbConnect";
 import User from "@/models/User";
 import * as jwt from "jsonwebtoken";
@@ -39,15 +38,29 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
   }
 
   // Validate password
-  if (foundUser.password !== password) {
+  const isPasswordValid = await bcryptjs.compare(password, foundUser.password);
+  if (!isPasswordValid) {
+  // if (foundUser.password !== password) {
     return NextResponse.json({ message: "Invalid password." }, { status: 401 });
+  }
+
+  // Only admin users can log into the admin area.
+  if (foundUser.role !== "admin") {
+    return NextResponse.json(
+      { message: "Access denied. Admin role required." },
+      { status: 403 },
+    );
   }
 
   // Data valid, create jwt;
   // Create JWT for admin authorization. 1 hour access.
-  const admin_auth_token = jwt.sign({ username: username }, JWT_SECRET_KEY!, {
-    expiresIn: "168h",
-  });
+  const admin_auth_token = jwt.sign(
+    { username: username, role: foundUser.role },
+    JWT_SECRET_KEY!,
+    {
+      expiresIn: "168h",
+    },
+  );
 
   // Set secure cookie attributes
   const cookieOptions = [
@@ -64,7 +77,7 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
     {
       message: "success",
       userId: foundUser._id,
-      username: foundUser.name,
+      username: foundUser.username,
       email: foundUser.email,
       role: foundUser.role,
     },

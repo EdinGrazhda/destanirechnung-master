@@ -1401,6 +1401,72 @@ p.large {
   background-color: #1a3a9e;
 }
 
+.register-user-card {
+  margin-top: 32px;
+  border: 1px solid #e6e9ef;
+  border-radius: 14px;
+  background: #fff;
+  padding: 20px;
+}
+.register-user-card__title {
+  margin: 0 0 16px 0;
+  font-family: PublicSans, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #212b36;
+}
+.register-user-card__message {
+  margin: 0 0 14px 0;
+  font-family: PublicSans, sans-serif;
+  font-size: 14px;
+  color: #2148c0;
+}
+
+/* --- Message Display --- */
+.dash-message {
+  background: #d5f4e7;
+  border: 1px solid #118d57;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: PublicSans, sans-serif;
+  font-size: 14px;
+  color: #118d57;
+}
+.dash-message p {
+  margin: 0;
+}
+
+/* --- Action Buttons --- */
+.dash-action-btn {
+  height: 36px;
+  padding: 0 16px;
+  background-color: #2148c0;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: PublicSans, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+.dash-action-btn:hover:not(:disabled) {
+  background-color: #1a3a9e;
+}
+.dash-action-btn:disabled {
+  background-color: #c8d0da;
+  cursor: not-allowed;
+}
+.dash-action-btn--secondary {
+  background-color: #f0f0f0;
+  color: #212b36;
+  border: 1px solid #e0e3e8;
+}
+.dash-action-btn--secondary:hover:not(:disabled) {
+  background-color: #e8e8e8;
+}
+
 /* ============================================
    RESPONSIVE
    ============================================ */

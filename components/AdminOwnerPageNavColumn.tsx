@@ -113,6 +113,16 @@ const AdminOwnerPageNavColumn = ({
               <i className="fa-regular fa-user sidebar__nav-icon"></i>
               <span>Benutzer</span>
             </div>
+            <div
+              className={`sidebar__nav-item ${activePage === "usermanagement" ? "sidebar__nav-item--active" : ""}`}
+              onClick={() => {
+                window.location.href = "/admin/usermanagement";
+                setMobileOpen(false);
+              }}
+            >
+              <i className="fa-solid fa-lock sidebar__nav-icon"></i>
+              <span>Benutzerverwaltung</span>
+            </div>
           </nav>
         </div>
         <div className="sidebar__bottom">

@@ -142,6 +142,8 @@ const page = () => {
   // Filtered invoices
   const filteredInvoices = dashboardInvoices
     .filter((inv) => {
+      if (inv.status !== "pending") return false;
+
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (

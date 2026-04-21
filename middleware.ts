@@ -28,6 +28,15 @@ export async function middleware(request: NextRequest) {
       new TextEncoder().encode(JWT_SECRET_KEY),
     );
 
+    const role =
+      typeof verified_token.payload.role === "string"
+        ? verified_token.payload.role
+        : "";
+
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL("/?cause=Forbidden", request.url));
+    }
+
     console.log("verified_token");
     console.log(verified_token);
 

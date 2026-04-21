@@ -9,6 +9,12 @@ const page = () => {
   const [sprache, setSprache] = useState("");
   const [land, setLand] = useState("");
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [newUserUsername, setNewUserUsername] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("user");
+  const [registerMessage, setRegisterMessage] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -35,6 +41,47 @@ const page = () => {
         setProfileImage(ev.target?.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRegisterUser = async () => {
+    if (!newUserUsername || !newUserEmail || !newUserPassword || !newUserRole) {
+      setRegisterMessage("Bitte alle Felder ausfuellen.");
+      return;
+    }
+
+    try {
+      setIsRegistering(true);
+      setRegisterMessage("");
+
+      const response = await fetch("/api/admin/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          username: newUserUsername,
+          email: newUserEmail,
+          password: newUserPassword,
+          role: newUserRole,
+        }),
+      });
+
+      const json = await response.json();
+      if (response.ok) {
+        setRegisterMessage("Benutzer erfolgreich erstellt.");
+        setNewUserUsername("");
+        setNewUserEmail("");
+        setNewUserPassword("");
+        setNewUserRole("user");
+      } else {
+        setRegisterMessage(
+          json.message || "Benutzer konnte nicht erstellt werden.",
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setRegisterMessage("Network Connectivity Issues.");
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -160,6 +207,73 @@ const page = () => {
               style={{ display: "none" }}
               onChange={handleImageUpload}
             />
+          </div>
+
+          <div className="register-user-card">
+            <h3 className="register-user-card__title">
+              Neuen Benutzer erstellen
+            </h3>
+
+            <div className="profile-form">
+              <div className="profile-field">
+                <label className="profile-field__label">Benutzername</label>
+                <input
+                  type="text"
+                  className="profile-field__input"
+                  placeholder="Neuer Benutzername"
+                  value={newUserUsername}
+                  onChange={(e) => setNewUserUsername(e.target.value)}
+                />
+              </div>
+
+              <div className="profile-field">
+                <label className="profile-field__label">E-Mail</label>
+                <input
+                  type="email"
+                  className="profile-field__input"
+                  placeholder="name@firma.de"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="profile-field">
+                <label className="profile-field__label">Passwort</label>
+                <input
+                  type="password"
+                  className="profile-field__input"
+                  placeholder="Mindestens 6 Zeichen"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                />
+              </div>
+
+              <div className="profile-field">
+                <label className="profile-field__label">Rolle</label>
+                <div className="profile-field__select-wrap">
+                  <select
+                    className="profile-field__select"
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {registerMessage && (
+              <p className="register-user-card__message">{registerMessage}</p>
+            )}
+
+            <button
+              className="profile-image-upload__btn"
+              onClick={handleRegisterUser}
+              disabled={isRegistering}
+            >
+              {isRegistering ? "Erstelle Benutzer..." : "Benutzer erstellen"}
+            </button>
           </div>
         </div>
       </main>
