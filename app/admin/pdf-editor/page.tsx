@@ -1,8 +1,9 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-const PDFEditorPage = () => {
+const PDFEditorContent = () => {
   const searchParams = useSearchParams();
   const filename = searchParams.get("file");
   const invoiceId = searchParams.get("id");
@@ -40,18 +41,22 @@ const PDFEditorPage = () => {
 
       if (data.hasAnnotations && canvasRef.current) {
         const img = new Image();
+
         img.onload = () => {
           const context = canvasRef.current!.getContext("2d");
+
           if (context) {
             const rect = canvasRef.current!.getBoundingClientRect();
-            const scale = window.devicePixelRatio || 2;
             context.drawImage(img, 0, 0, rect.width, rect.height);
           }
+
           setAnnotationsLoaded(true);
         };
+
         img.onerror = () => {
           setAnnotationsLoaded(true);
         };
+
         img.src = data.annotationData;
       } else {
         setAnnotationsLoaded(true);
@@ -87,6 +92,7 @@ const PDFEditorPage = () => {
           canvas.height = rect.height * scale;
 
           const context = canvas.getContext("2d");
+
           if (context) {
             context.scale(scale, scale);
             setCtx(context);
@@ -121,6 +127,7 @@ const PDFEditorPage = () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
+
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [hasChanges, saving]);
@@ -162,7 +169,8 @@ const PDFEditorPage = () => {
   };
 
   const stopDrawing = () => {
-    if (!ctx) return;
+    if (!ctx || !isDrawing) return;
+
     setIsDrawing(false);
     ctx.closePath();
     setHasChanges(true);
@@ -206,10 +214,10 @@ const PDFEditorPage = () => {
         }, "image/png");
       });
 
-      // Create form data with both the annotation overlay and original file info
       const formData = new FormData();
       formData.append("annotationImage", blob, "annotations.png");
       formData.append("originalFilename", filename);
+
       if (invoiceId) {
         formData.append("invoiceId", invoiceId);
       }
@@ -224,9 +232,11 @@ const PDFEditorPage = () => {
       if (response.ok) {
         setSaveStatus("saved");
         setHasChanges(false);
+
         if (!isAutoSave) {
           alert("PDF mit Anmerkungen erfolgreich gespeichert!");
         }
+
         setTimeout(() => {
           setSaveStatus("idle");
         }, 3000);
@@ -237,6 +247,7 @@ const PDFEditorPage = () => {
     } catch (error) {
       console.error("Error saving PDF:", error);
       setSaveStatus("idle");
+
       if (!isAutoSave) {
         alert("Fehler beim Speichern des PDFs");
       }
@@ -305,7 +316,7 @@ const PDFEditorPage = () => {
           </div>
         )}
 
-        <div style={{ marginLeft: "auto" }}></div>
+        <div style={{ marginLeft: "auto" }} />
 
         <button
           onClick={() => setDrawMode(!drawMode)}
@@ -474,8 +485,8 @@ const PDFEditorPage = () => {
               style={{
                 position: "relative",
                 width: "100%",
-                maxWidth: "210mm", // A4 width
-                minHeight: "297mm", // A4 height
+                maxWidth: "210mm",
+                minHeight: "297mm",
               }}
             >
               <iframe
@@ -489,6 +500,7 @@ const PDFEditorPage = () => {
                   backgroundColor: "white",
                 }}
               />
+
               <canvas
                 ref={canvasRef}
                 onMouseDown={startDrawing}
@@ -516,6 +528,14 @@ const PDFEditorPage = () => {
         )}
       </div>
     </div>
+  );
+};
+
+const PDFEditorPage = () => {
+  return (
+    <Suspense fallback={<div>Loading PDF Editor...</div>}>
+      <PDFEditorContent />
+    </Suspense>
   );
 };
 
