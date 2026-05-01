@@ -9,14 +9,10 @@ if (!JWT_SECRET_KEY) {
 }
 
 export async function middleware(request: NextRequest) {
-  console.log("MIDDLEWAREE");
-
   const token = request.cookies.get("admin_auth_token");
-  console.log(token);
 
   // Check if the auth_token cookie exists in the request
   if (!token) {
-    console.log("redirect");
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -37,9 +33,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/?cause=Forbidden", request.url));
     }
 
-    console.log("verified_token");
-    console.log(verified_token);
-
     // Set user id to response headers so the route handler can access.
     const response = NextResponse.next();
     // response.headers.append("user_id", verified_token.payload.id!.toString());
@@ -48,7 +41,6 @@ export async function middleware(request: NextRequest) {
     return response;
   } catch (err) {
     if (!isJwtError(err)) {
-      console.log(`Internal Server Error: ${err}`);
       return NextResponse.redirect(
         new URL("/?cause=InternalServerError", request.url),
       );
@@ -69,7 +61,6 @@ export async function middleware(request: NextRequest) {
       );
     } else {
       // Other un-handled JWT error
-      console.log(`Un-Handled JWT Error: ${err}`);
       return NextResponse.redirect(
         new URL("/?cause=InternalServerError", request.url),
       );

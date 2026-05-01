@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcryptjs from "bcryptjs";
-import dbConnect from "@/utils/dbConnect";
+import { connectDB } from "@/utils/dbConnect";
 import User from "@/models/User";
 import * as jwt from "jsonwebtoken";
+import { isRateLimited } from "@/utils/rateLimit";
 
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY;
 
@@ -11,6 +12,19 @@ if (!JWT_SECRET_KEY) {
 }
 
 export const POST = async (req: NextRequest, res: NextResponse) => {
+  // Rate limit: 10 login attempts per minute per IP (brute-force protection)
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
+
+  if (isRateLimited(ip, 10, 60_000)) {
+    return NextResponse.json(
+      { message: "Too many login attempts. Please try again later." },
+      { status: 429 },
+    );
+  }
+
   // Get the request data
   const { username, password } = await req.json();
 
@@ -23,11 +37,10 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
   }
 
   // Create connection to DB
-  await dbConnect();
+  await connectDB();
 
   // Get user with the matching username address from the database
   const foundUser = await User.findOne({ username: username });
-  console.log(foundUser);
 
   // Check if the user exists
   if (!foundUser) {
@@ -40,7 +53,7 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
   // Validate password
   const isPasswordValid = await bcryptjs.compare(password, foundUser.password);
   if (!isPasswordValid) {
-  // if (foundUser.password !== password) {
+    // if (foundUser.password !== password) {
     return NextResponse.json({ message: "Invalid password." }, { status: 401 });
   }
 

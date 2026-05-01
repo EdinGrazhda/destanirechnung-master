@@ -1,29 +1,35 @@
-import { readFile } from "fs/promises";
+import { readFile, access, constants } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import fs from "fs";
+
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploaded");
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const filename = searchParams.get("filename");
+    const rawFilename = searchParams.get("filename");
 
-    if (!filename) {
+    if (!rawFilename) {
       return NextResponse.json(
         { message: "Filename is required" },
         { status: 400 },
       );
     }
 
-    const annotationFilename = `annotation_${filename.replace(".pdf", ".png")}`;
-    const annotationPath = path.join(
-      process.cwd(),
-      "public",
-      "uploaded",
-      annotationFilename,
-    );
+    // Strip any directory traversal components
+    const safeFilename = path.basename(rawFilename);
+    const annotationFilename = `annotation_${safeFilename.replace(".pdf", ".png")}`;
+    const annotationPath = path.join(UPLOAD_DIR, annotationFilename);
 
-    if (!fs.existsSync(annotationPath)) {
+    // Ensure resolved path stays within upload directory
+    if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
+      return NextResponse.json({ hasAnnotations: false }, { status: 200 });
+    }
+
+    // Async existence check — does not block the event loop
+    try {
+      await access(annotationPath, constants.R_OK);
+    } catch {
       return NextResponse.json({ hasAnnotations: false }, { status: 200 });
     }
 

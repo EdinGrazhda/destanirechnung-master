@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcryptjs from "bcryptjs";
-import dbConnect from "@/utils/dbConnect";
+import { connectDB } from "@/utils/dbConnect";
 import User from "@/models/User";
 import validateEmail from "@/utils/validateEmail";
 
@@ -35,7 +35,7 @@ export const POST = async (req: NextRequest) => {
       );
     }
 
-    await dbConnect();
+    await connectDB();
 
     const existingUser = await User.findOne({
       $or: [{ username: normalizedUsername }, { email: normalizedEmail }],
@@ -62,7 +62,6 @@ export const POST = async (req: NextRequest) => {
       { status: 201 },
     );
   } catch (err) {
-    console.log(err);
     return NextResponse.json(
       { message: "Internal Server Error." },
       { status: 500 },

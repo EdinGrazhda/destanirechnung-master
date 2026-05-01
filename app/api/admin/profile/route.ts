@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import * as jose from "jose";
-import dbConnect from "@/utils/dbConnect";
+import { connectDB } from "@/utils/dbConnect";
 import User from "@/models/User";
 
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY;
@@ -18,7 +18,7 @@ export const GET = async (req: NextRequest) => {
       new TextEncoder().encode(JWT_SECRET_KEY),
     );
 
-    await dbConnect();
+    await connectDB();
     const user = await User.findOne({ username: payload.username }).select(
       "-password",
     );

@@ -1,27 +1,26 @@
 export const dynamic = "force-dynamic";
 import Invoice from "@/models/Invoice";
-import dbConnect from "@/utils/dbConnect";
+import { connectDB } from "@/utils/dbConnect";
 import { NextRequest, NextResponse } from "next/server";
 
 export const GET = async (req: NextRequest, res: NextResponse) => {
-  const { searchParams } = new URL(req.url);
-  const invoiceStatus = searchParams.get("invoiceStatus");
+  await connectDB();
 
-  await dbConnect();
-  const allInvoicesCount = (await Invoice.find({})).length;
-  const approvedInvoicesCount = (await Invoice.find({ status: "approved" }))
-    .length;
-  const pendingInvoicesCount = (await Invoice.find({ status: "pending" }))
-    .length;
-  const paidInvoicesCount = (await Invoice.find({ status: "paid" })).length;
+  const [allInvoicesCount, approvedInvoicesCount, pendingInvoicesCount, paidInvoicesCount] =
+    await Promise.all([
+      Invoice.countDocuments({}),
+      Invoice.countDocuments({ status: "approved" }),
+      Invoice.countDocuments({ status: "pending" }),
+      Invoice.countDocuments({ status: "paid" }),
+    ]);
 
   return NextResponse.json(
     {
       message: "Success",
-      allInvoicesCount: allInvoicesCount,
-      approvedInvoicesCount: approvedInvoicesCount,
-      pendingInvoicesCount: pendingInvoicesCount,
-      paidInvoicesCount: paidInvoicesCount,
+      allInvoicesCount,
+      approvedInvoicesCount,
+      pendingInvoicesCount,
+      paidInvoicesCount,
     },
     { status: 200 },
   );
