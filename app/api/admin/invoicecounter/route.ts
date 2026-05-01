@@ -6,13 +6,17 @@ import { NextRequest, NextResponse } from "next/server";
 export const GET = async (req: NextRequest, res: NextResponse) => {
   await connectDB();
 
-  const [allInvoicesCount, approvedInvoicesCount, pendingInvoicesCount, paidInvoicesCount] =
-    await Promise.all([
-      Invoice.countDocuments({}),
-      Invoice.countDocuments({ status: "approved" }),
-      Invoice.countDocuments({ status: "pending" }),
-      Invoice.countDocuments({ status: "paid" }),
-    ]);
+  const [
+    allInvoicesCount,
+    approvedInvoicesCount,
+    pendingInvoicesCount,
+    paidInvoicesCount,
+  ] = await Promise.all([
+    Invoice.countDocuments({}),
+    Invoice.countDocuments({ status: "approved" }),
+    Invoice.countDocuments({ status: "pending" }),
+    Invoice.countDocuments({ status: "paid" }),
+  ]);
 
   return NextResponse.json(
     {
