@@ -239,18 +239,20 @@ export const PUT = async (req: NextRequest) => {
 
     await connectDB();
 
-    const foundInvoice = await Invoice.findOne({ _id: invoiceId });
+    // Single atomic update — avoids loading the full document into memory
+    // just to change one field.
+    const updated = await Invoice.findByIdAndUpdate(
+      invoiceId,
+      { $set: { status: newStatus } },
+      { new: true },
+    ).lean();
 
-    if (!foundInvoice) {
+    if (!updated) {
       return NextResponse.json(
         { message: "Invoice not found." },
         { status: 404 },
       );
     }
-
-    foundInvoice.status = newStatus;
-    foundInvoice.markModified("status");
-    await foundInvoice.save();
 
     return NextResponse.json({ message: "Success" }, { status: 200 });
   } catch (error) {

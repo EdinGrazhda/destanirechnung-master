@@ -6,7 +6,7 @@ import User from "@/models/User";
 export const GET = async (req: NextRequest) => {
   try {
     await connectDB();
-    const users = await User.find({}).select("-password");
+    const users = await User.find({}).select("-password").lean();
 
     return NextResponse.json({ message: "Success", users }, { status: 200 });
   } catch (err) {
