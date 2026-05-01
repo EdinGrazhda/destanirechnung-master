@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
@@ -133,7 +131,12 @@ export const GET = async (req: NextRequest) => {
 
       return NextResponse.json(
         { message: "Success", foundInvoices },
-        { status: 200 },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "public, max-age=15, stale-while-revalidate=30",
+          },
+        },
       );
     }
 
@@ -188,7 +191,12 @@ export const GET = async (req: NextRequest) => {
 
       return NextResponse.json(
         { message: "Success", foundInvoices },
-        { status: 200 },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "public, max-age=15, stale-while-revalidate=30",
+          },
+        },
       );
     }
 
@@ -201,7 +209,12 @@ export const GET = async (req: NextRequest) => {
 
     return NextResponse.json(
       { message: "Success", foundInvoices },
-      { status: 200 },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, max-age=15, stale-while-revalidate=30",
+        },
+      },
     );
   } catch (error) {
     console.error("Invoice GET error:", error);

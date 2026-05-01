@@ -1,4 +1,3 @@
-export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import * as jose from "jose";
 import { connectDB } from "@/utils/dbConnect";
@@ -27,11 +26,20 @@ export const GET = async (req: NextRequest) => {
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      username: user.username,
-      email: user.email,
-      role: user.role,
-    });
+    return NextResponse.json(
+      {
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+      {
+        headers: {
+          // Private: only the browser caches this (not shared CDN).
+          // Profile data rarely changes mid-session — 5 min is safe.
+          "Cache-Control": "private, max-age=300, stale-while-revalidate=60",
+        },
+      },
+    );
   } catch {
     return NextResponse.json(
       { message: "Internal Server Error" },
