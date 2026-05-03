@@ -501,18 +501,43 @@ const PDFEditorContent = () => {
                 }}
               />
 
-              <canvas
-                ref={canvasRef}
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
+              {/* Scroll interceptor – sits above the iframe so wheel events
+                  never reach the iframe's internal PDF viewer. In draw mode
+                  the canvas (zIndex 2) is on top and handles events instead. */}
+              <div
                 style={{
                   position: "absolute",
                   top: 0,
                   left: 0,
                   width: "100%",
                   height: "297mm",
+                  zIndex: 1,
+                }}
+                onWheel={(e) => {
+                  if (containerRef.current) {
+                    containerRef.current.scrollTop += e.deltaY;
+                  }
+                }}
+              />
+
+              <canvas
+                ref={canvasRef}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                onWheel={(e) => {
+                  if (containerRef.current) {
+                    containerRef.current.scrollTop += e.deltaY;
+                  }
+                }}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "297mm",
+                  zIndex: 2,
                   cursor: drawMode
                     ? tool === "pen"
                       ? "crosshair"
