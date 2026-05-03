@@ -70,6 +70,28 @@ const page = () => {
     }
   };
 
+  const setPending = async (invoiceId: string) => {
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId, newStatus: "pending" }),
+      });
+      if (response.ok) {
+        setApprovedInvoices((prev) =>
+          prev.filter((inv) => inv._id !== invoiceId),
+        );
+        setOpenMenuId(null);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    }
+  };
+
   const deleteInvoice = async (invoiceId: string) => {
     try {
       const response = await fetch("/api/admin/invoice", {
@@ -357,6 +379,13 @@ const page = () => {
                     onClick={() => payInvoice(inv._id)}
                   >
                     <i className="fa-regular fa-credit-card"></i> Bezahle es
+                  </div>
+                  <div
+                    className="dash-menu__item"
+                    onClick={() => setPending(inv._id)}
+                  >
+                    <i className="fa-solid fa-rotate-left"></i> Auf Ausstehend
+                    setzen
                   </div>
                   <div
                     className="dash-menu__item dash-menu__item--danger"
