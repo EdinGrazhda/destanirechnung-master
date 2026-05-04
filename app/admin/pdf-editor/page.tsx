@@ -9,7 +9,7 @@ const PDFEditorContent = () => {
   const invoiceId = searchParams.get("id");
 
   const [pdfUrl, setPdfUrl] = useState("");
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
   const [drawColor, setDrawColor] = useState("#ff0000");
   const [lineWidth, setLineWidth] = useState(3);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
@@ -136,7 +136,7 @@ const PDFEditorContent = () => {
     if (!ctx || !canvasRef.current || !drawMode) return;
 
     e.preventDefault();
-    setIsDrawing(true);
+    isDrawingRef.current = true;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -156,7 +156,8 @@ const PDFEditorContent = () => {
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !ctx || !canvasRef.current || !drawMode) return;
+    if (!isDrawingRef.current || !ctx || !canvasRef.current || !drawMode)
+      return;
 
     e.preventDefault();
 
@@ -169,9 +170,9 @@ const PDFEditorContent = () => {
   };
 
   const stopDrawing = () => {
-    if (!ctx || !isDrawing) return;
+    if (!ctx || !isDrawingRef.current) return;
 
-    setIsDrawing(false);
+    isDrawingRef.current = false;
     ctx.closePath();
     setHasChanges(true);
     triggerAutoSave();
@@ -460,97 +461,77 @@ const PDFEditorContent = () => {
         </button>
       </div>
 
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          position: "relative",
-          overflow: "auto",
-          backgroundColor: "#525252",
-        }}
-      >
-        {pdfUrl && (
-          <div
-            style={{
-              position: "relative",
-              width: "100%",
-              minHeight: "100%",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "flex-start",
-              padding: "20px",
-            }}
-          >
+      <div style={{ flex: 1, position: "relative" }}>
+        <div
+          ref={containerRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            overflow: "auto",
+            backgroundColor: "#525252",
+          }}
+        >
+          {pdfUrl && (
             <div
               style={{
                 position: "relative",
                 width: "100%",
-                maxWidth: "210mm",
-                minHeight: "297mm",
+                minHeight: "100%",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "flex-start",
+                padding: "20px",
               }}
             >
-              <iframe
-                ref={iframeRef}
-                src={pdfUrl}
-                style={{
-                  width: "100%",
-                  height: "297mm",
-                  border: "none",
-                  display: "block",
-                  backgroundColor: "white",
-                }}
-              />
-
-              {/* Scroll interceptor – sits above the iframe so wheel events
-                  never reach the iframe's internal PDF viewer. In draw mode
-                  the canvas (zIndex 2) is on top and handles events instead. */}
               <div
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
+                  position: "relative",
                   width: "100%",
-                  height: "297mm",
-                  zIndex: 1,
+                  maxWidth: "210mm",
+                  minHeight: "297mm",
                 }}
-                onWheel={(e) => {
-                  if (containerRef.current) {
-                    containerRef.current.scrollTop += e.deltaY;
-                  }
-                }}
-              />
-
-              <canvas
-                ref={canvasRef}
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-                onWheel={(e) => {
-                  if (containerRef.current) {
-                    containerRef.current.scrollTop += e.deltaY;
-                  }
-                }}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "297mm",
-                  zIndex: 2,
-                  cursor: drawMode
-                    ? tool === "pen"
-                      ? "crosshair"
-                      : "pointer"
-                    : "default",
-                  pointerEvents: drawMode ? "auto" : "none",
-                  touchAction: "none",
-                  border: drawMode ? "2px solid rgba(0, 160, 0, 0.5)" : "none",
-                }}
-              />
+              >
+                <iframe
+                  ref={iframeRef}
+                  src={pdfUrl}
+                  style={{
+                    width: "100%",
+                    height: "297mm",
+                    border: "none",
+                    display: "block",
+                    backgroundColor: "white",
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Canvas is a sibling of the scrollable container so it stays
+            fixed in place while the PDF scrolls underneath it. */}
+        <canvas
+          ref={canvasRef}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            zIndex: 2,
+            cursor: drawMode
+              ? tool === "pen"
+                ? "crosshair"
+                : "pointer"
+              : "default",
+            pointerEvents: drawMode ? "auto" : "none",
+            touchAction: "none",
+            border: drawMode ? "2px solid rgba(0, 160, 0, 0.5)" : "none",
+          }}
+        />
       </div>
     </div>
   );
