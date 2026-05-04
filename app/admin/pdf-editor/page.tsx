@@ -502,36 +502,36 @@ const PDFEditorContent = () => {
                     backgroundColor: "white",
                   }}
                 />
+
+                <canvas
+                  ref={canvasRef}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "297mm",
+                    zIndex: 2,
+                    cursor: drawMode
+                      ? tool === "pen"
+                        ? "crosshair"
+                        : "pointer"
+                      : "default",
+                    pointerEvents: drawMode ? "auto" : "none",
+                    touchAction: "none",
+                    border: drawMode
+                      ? "2px solid rgba(0, 160, 0, 0.5)"
+                      : "none",
+                  }}
+                />
               </div>
             </div>
           )}
         </div>
-
-        {/* Canvas is a sibling of the scrollable container so it stays
-            fixed in place while the PDF scrolls underneath it. */}
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            zIndex: 2,
-            cursor: drawMode
-              ? tool === "pen"
-                ? "crosshair"
-                : "pointer"
-              : "default",
-            pointerEvents: drawMode ? "auto" : "none",
-            touchAction: "none",
-            border: drawMode ? "2px solid rgba(0, 160, 0, 0.5)" : "none",
-          }}
-        />
       </div>
     </div>
   );
