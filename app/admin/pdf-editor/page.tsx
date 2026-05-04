@@ -25,6 +25,11 @@ const PDFEditorContent = () => {
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+  const [iframeScrollOffset, setIframeScrollOffset] = useState({
+    x: 0,
+    y: 0,
+  });
+  const iframeScrollSyncUnavailableRef = useRef(false);
 
   useEffect(() => {
     if (filename) {
@@ -131,6 +136,55 @@ const PDFEditorContent = () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [hasChanges, saving]);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    const syncIframeScroll = () => {
+      if (iframeScrollSyncUnavailableRef.current || !iframeRef.current) {
+        rafId = requestAnimationFrame(syncIframeScroll);
+        return;
+      }
+
+      try {
+        const iframeWindow = iframeRef.current.contentWindow;
+
+        if (!iframeWindow) {
+          rafId = requestAnimationFrame(syncIframeScroll);
+          return;
+        }
+
+        const scrollEl =
+          iframeWindow.document.scrollingElement ||
+          iframeWindow.document.documentElement ||
+          iframeWindow.document.body;
+
+        const nextX = scrollEl ? scrollEl.scrollLeft : iframeWindow.scrollX;
+        const nextY = scrollEl ? scrollEl.scrollTop : iframeWindow.scrollY;
+
+        setIframeScrollOffset((prev) => {
+          if (prev.x === nextX && prev.y === nextY) {
+            return prev;
+          }
+          return { x: nextX, y: nextY };
+        });
+      } catch {
+        iframeScrollSyncUnavailableRef.current = true;
+      }
+
+      rafId = requestAnimationFrame(syncIframeScroll);
+    };
+
+    iframeScrollSyncUnavailableRef.current = false;
+    setIframeScrollOffset({ x: 0, y: 0 });
+    rafId = requestAnimationFrame(syncIframeScroll);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [pdfUrl]);
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!ctx || !canvasRef.current || !drawMode) return;
@@ -526,6 +580,7 @@ const PDFEditorContent = () => {
                     border: drawMode
                       ? "2px solid rgba(0, 160, 0, 0.5)"
                       : "none",
+                    transform: `translate(${-iframeScrollOffset.x}px, ${-iframeScrollOffset.y}px)`,
                   }}
                 />
               </div>
