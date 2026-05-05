@@ -237,13 +237,15 @@ const PDFEditorContent = () => {
     if (!scroller) return;
 
     const onScroll = () => {
+      const scrollerRect = scroller.getBoundingClientRect();
       let nearestPage = 1;
       let nearestDistance = Number.POSITIVE_INFINITY;
 
       for (let i = 1; i <= numPages; i += 1) {
         const pageEl = pageWrapperRefs.current[i];
         if (!pageEl) continue;
-        const dist = Math.abs(pageEl.offsetTop - scroller.scrollTop);
+        const pageRect = pageEl.getBoundingClientRect();
+        const dist = Math.abs(pageRect.top - scrollerRect.top);
         if (dist < nearestDistance) {
           nearestDistance = dist;
           nearestPage = i;
@@ -441,10 +443,7 @@ const PDFEditorContent = () => {
     const pageEl = pageWrapperRefs.current[pageNum];
     if (!scroller || !pageEl) return;
 
-    scroller.scrollTo({
-      top: pageEl.offsetTop - 10,
-      behavior: "smooth",
-    });
+    pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
     setCurrentPage(pageNum);
   };
 
