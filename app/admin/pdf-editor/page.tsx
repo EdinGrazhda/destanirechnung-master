@@ -37,41 +37,6 @@ const PDFEditorContent = () => {
     }
   }, [filename]);
 
-  const loadExistingAnnotations = async (filename: string) => {
-    try {
-      const response = await fetch(
-        `/api/admin/getannotations?filename=${filename}`,
-      );
-      const data = await response.json();
-
-      if (data.hasAnnotations && canvasRef.current) {
-        const img = new Image();
-
-        img.onload = () => {
-          const context = canvasRef.current!.getContext("2d");
-
-          if (context) {
-            const rect = canvasRef.current!.getBoundingClientRect();
-            context.drawImage(img, 0, 0, rect.width, rect.height);
-          }
-
-          setAnnotationsLoaded(true);
-        };
-
-        img.onerror = () => {
-          setAnnotationsLoaded(true);
-        };
-
-        img.src = data.annotationData;
-      } else {
-        setAnnotationsLoaded(true);
-      }
-    } catch (error) {
-      console.error("Error loading annotations:", error);
-      setAnnotationsLoaded(true);
-    }
-  };
-
   useEffect(() => {
     if (ctx) {
       if (tool === "pen") {
@@ -106,9 +71,7 @@ const PDFEditorContent = () => {
             context.lineWidth = lineWidth;
             context.strokeStyle = drawColor;
 
-            if (filename) {
-              loadExistingAnnotations(filename);
-            }
+            setAnnotationsLoaded(true);
           }
         }
       }

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { isRateLimited } from "@/utils/rateLimit";
+import { PDFDocument } from "pdf-lib";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploaded");
 
@@ -70,6 +71,54 @@ export async function GET(
 
   const contentType =
     contentTypeMap[fileExtension] ?? "application/octet-stream";
+
+  if (fileExtension === "pdf") {
+    const annotationFilename = `annotation_${fileName.replace(".pdf", ".png")}`;
+    const annotationPath = path.join(UPLOAD_DIR, annotationFilename);
+
+    // Safety net for derived annotation path
+    if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
+      return new NextResponse("Invalid file path", { status: 400 });
+    }
+
+    try {
+      await fs.promises.access(annotationPath, fs.constants.R_OK);
+
+      const [pdfBuffer, annotationBuffer] = await Promise.all([
+        fs.promises.readFile(filePath),
+        fs.promises.readFile(annotationPath),
+      ]);
+
+      const pdfDoc = await PDFDocument.load(pdfBuffer);
+      const pages = pdfDoc.getPages();
+
+      if (pages.length > 0) {
+        const firstPage = pages[0];
+        const annotationImage = await pdfDoc.embedPng(annotationBuffer);
+
+        firstPage.drawImage(annotationImage, {
+          x: 0,
+          y: 0,
+          width: firstPage.getWidth(),
+          height: firstPage.getHeight(),
+        });
+      }
+
+      const mergedPdfBytes = await pdfDoc.save();
+      const mergedHeaders = new Headers({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${fileName}"`,
+        // Avoid stale content after signing/saving
+        "Cache-Control": "no-store",
+      });
+
+      return new NextResponse(Buffer.from(mergedPdfBytes), {
+        headers: mergedHeaders,
+      });
+    } catch {
+      // No annotation file or merge failed: fallback to original PDF
+    }
+  }
 
   const headers = new Headers({
     "Content-Type": contentType,
