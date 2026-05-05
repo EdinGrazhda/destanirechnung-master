@@ -1,7 +1,15 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  GlobalWorkerOptions,
+  getDocument,
+  type PDFDocumentProxy,
+} from "pdfjs-dist";
+
+GlobalWorkerOptions.workerSrc =
+  "https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs";
 
 const PDFEditorContent = () => {
   const searchParams = useSearchParams();
@@ -9,76 +17,192 @@ const PDFEditorContent = () => {
   const invoiceId = searchParams.get("id");
 
   const [pdfUrl, setPdfUrl] = useState("");
-  const isDrawingRef = useRef(false);
+  const [mergedPdfUrl, setMergedPdfUrl] = useState("");
   const [drawColor, setDrawColor] = useState("#ff0000");
   const [lineWidth, setLineWidth] = useState(3);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [drawMode, setDrawMode] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [zoom, setZoom] = useState(1.2);
+  const [isRendering, setIsRendering] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
-  const [iframeScrollOffset, setIframeScrollOffset] = useState({
-    x: 0,
-    y: 0,
-  });
-  const iframeScrollSyncUnavailableRef = useRef(false);
+
+  const pageCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
+  const annotationCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>(
+    {},
+  );
+  const thumbCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
+  const pageWrapperRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+
+  const isDrawingRef = useRef(false);
+  const activeDrawPageRef = useRef<number | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pageNumbers = useMemo(
+    () => Array.from({ length: numPages }, (_, i) => i + 1),
+    [numPages],
+  );
 
   useEffect(() => {
     if (filename) {
-      setPdfUrl(`/api/getuploadedfiles/${filename}`);
+      const safeName = encodeURIComponent(filename);
+      setPdfUrl(`/api/getuploadedfiles/${safeName}?raw=1`);
+      setMergedPdfUrl(`/api/getuploadedfiles/${safeName}`);
     }
   }, [filename]);
 
   useEffect(() => {
-    if (ctx) {
-      if (tool === "pen") {
-        ctx.strokeStyle = drawColor;
-        ctx.lineWidth = lineWidth;
-        ctx.globalCompositeOperation = "source-over";
-      } else {
-        ctx.lineWidth = lineWidth * 3;
-        ctx.globalCompositeOperation = "destination-out";
+    let cancelled = false;
+    let loadingTask: ReturnType<typeof getDocument> | null = null;
+
+    const loadPdf = async () => {
+      if (!pdfUrl) return;
+      try {
+        setIsRendering(true);
+        setAnnotationsLoaded(false);
+        loadingTask = getDocument(pdfUrl);
+        const loaded = await loadingTask.promise;
+        if (cancelled) return;
+        setPdfDoc(loaded);
+        setNumPages(loaded.numPages);
+        setCurrentPage(1);
+      } catch (error) {
+        console.error("Error loading PDF:", error);
+      } finally {
+        if (!cancelled) setIsRendering(false);
       }
-    }
-  }, [tool, drawColor, lineWidth, ctx]);
+    };
+
+    loadPdf();
+
+    return () => {
+      cancelled = true;
+      if (loadingTask) loadingTask.destroy();
+    };
+  }, [pdfUrl]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (canvasRef.current) {
-        const canvas = canvasRef.current;
-        const rect = canvas.getBoundingClientRect();
+    let cancelled = false;
 
-        if (rect.width > 0 && rect.height > 0) {
-          const scale = window.devicePixelRatio || 2;
-          canvas.width = rect.width * scale;
-          canvas.height = rect.height * scale;
+    const renderPdfAndAnnotations = async () => {
+      if (!pdfDoc || numPages === 0) return;
+      setIsRendering(true);
 
-          const context = canvas.getContext("2d");
+      for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
+        if (cancelled) return;
 
-          if (context) {
-            context.scale(scale, scale);
-            setCtx(context);
-            context.lineCap = "round";
-            context.lineJoin = "round";
-            context.lineWidth = lineWidth;
-            context.strokeStyle = drawColor;
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: zoom });
+        const ratio = window.devicePixelRatio || 1;
 
-            setAnnotationsLoaded(true);
+        const pageCanvas = pageCanvasRefs.current[pageNum];
+        if (pageCanvas) {
+          pageCanvas.width = Math.floor(viewport.width * ratio);
+          pageCanvas.height = Math.floor(viewport.height * ratio);
+          pageCanvas.style.width = `${viewport.width}px`;
+          pageCanvas.style.height = `${viewport.height}px`;
+          const pctx = pageCanvas.getContext("2d");
+          if (pctx) {
+            pctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            await page.render({
+              canvasContext: pctx,
+              canvas: pageCanvas,
+              viewport,
+            }).promise;
+          }
+        }
+
+        const annotationCanvas = annotationCanvasRefs.current[pageNum];
+        if (annotationCanvas) {
+          annotationCanvas.width = Math.floor(viewport.width * ratio);
+          annotationCanvas.height = Math.floor(viewport.height * ratio);
+          annotationCanvas.style.width = `${viewport.width}px`;
+          annotationCanvas.style.height = `${viewport.height}px`;
+          const actx = annotationCanvas.getContext("2d");
+          if (actx) {
+            actx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            actx.lineCap = "round";
+            actx.lineJoin = "round";
+          }
+        }
+
+        const thumbCanvas = thumbCanvasRefs.current[pageNum];
+        if (thumbCanvas) {
+          const thumbViewport = page.getViewport({ scale: 0.2 });
+          thumbCanvas.width = Math.floor(thumbViewport.width * ratio);
+          thumbCanvas.height = Math.floor(thumbViewport.height * ratio);
+          thumbCanvas.style.width = `${thumbViewport.width}px`;
+          thumbCanvas.style.height = `${thumbViewport.height}px`;
+          const tctx = thumbCanvas.getContext("2d");
+          if (tctx) {
+            tctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            await page.render({
+              canvasContext: tctx,
+              canvas: thumbCanvas,
+              viewport: thumbViewport,
+            }).promise;
           }
         }
       }
-    }, 500);
 
-    return () => clearTimeout(timer);
-  }, [pdfUrl]);
+      if (!filename || cancelled) {
+        setAnnotationsLoaded(true);
+        setIsRendering(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/admin/getannotations?filename=${encodeURIComponent(filename)}`,
+        );
+        const data = await response.json();
+
+        if (data?.pages) {
+          for (const [pageKey, dataUrl] of Object.entries(data.pages)) {
+            const pageNum = Number(pageKey);
+            const annotationCanvas = annotationCanvasRefs.current[pageNum];
+            if (!annotationCanvas || typeof dataUrl !== "string") continue;
+
+            const image = new Image();
+            await new Promise<void>((resolve) => {
+              image.onload = () => {
+                const actx = annotationCanvas.getContext("2d");
+                if (actx) {
+                  const rect = annotationCanvas.getBoundingClientRect();
+                  actx.drawImage(image, 0, 0, rect.width, rect.height);
+                }
+                resolve();
+              };
+              image.onerror = () => resolve();
+              image.src = dataUrl;
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading annotations:", error);
+      } finally {
+        if (!cancelled) {
+          setAnnotationsLoaded(true);
+          setHasChanges(false);
+          setIsRendering(false);
+        }
+      }
+    };
+
+    renderPdfAndAnnotations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfDoc, numPages, zoom, filename]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -95,67 +219,69 @@ const PDFEditorContent = () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
-
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [hasChanges, saving]);
 
   useEffect(() => {
-    let rafId: number | null = null;
+    const handleWindowMouseUp = () => {
+      stopDrawing();
+    };
 
-    const syncIframeScroll = () => {
-      if (iframeScrollSyncUnavailableRef.current || !iframeRef.current) {
-        rafId = requestAnimationFrame(syncIframeScroll);
-        return;
-      }
+    window.addEventListener("mouseup", handleWindowMouseUp);
+    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+  });
 
-      try {
-        const iframeWindow = iframeRef.current.contentWindow;
+  useEffect(() => {
+    const scroller = mainScrollRef.current;
+    if (!scroller) return;
 
-        if (!iframeWindow) {
-          rafId = requestAnimationFrame(syncIframeScroll);
-          return;
+    const onScroll = () => {
+      let nearestPage = 1;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+
+      for (let i = 1; i <= numPages; i += 1) {
+        const pageEl = pageWrapperRefs.current[i];
+        if (!pageEl) continue;
+        const dist = Math.abs(pageEl.offsetTop - scroller.scrollTop);
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+          nearestPage = i;
         }
-
-        const scrollEl =
-          iframeWindow.document.scrollingElement ||
-          iframeWindow.document.documentElement ||
-          iframeWindow.document.body;
-
-        const nextX = scrollEl ? scrollEl.scrollLeft : iframeWindow.scrollX;
-        const nextY = scrollEl ? scrollEl.scrollTop : iframeWindow.scrollY;
-
-        setIframeScrollOffset((prev) => {
-          if (prev.x === nextX && prev.y === nextY) {
-            return prev;
-          }
-          return { x: nextX, y: nextY };
-        });
-      } catch {
-        iframeScrollSyncUnavailableRef.current = true;
       }
 
-      rafId = requestAnimationFrame(syncIframeScroll);
+      setCurrentPage(nearestPage);
     };
 
-    iframeScrollSyncUnavailableRef.current = false;
-    setIframeScrollOffset({ x: 0, y: 0 });
-    rafId = requestAnimationFrame(syncIframeScroll);
+    scroller.addEventListener("scroll", onScroll);
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [numPages]);
 
-    return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-    };
-  }, [pdfUrl]);
+  const triggerAutoSave = () => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!ctx || !canvasRef.current || !drawMode) return;
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      savePDF(true);
+    }, 5000);
+  };
+
+  const startDrawing = (
+    pageNum: number,
+    e: React.MouseEvent<HTMLCanvasElement>,
+  ) => {
+    if (!drawMode) return;
+
+    const canvas = annotationCanvasRefs.current[pageNum];
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
 
     e.preventDefault();
     isDrawingRef.current = true;
+    activeDrawPageRef.current = pageNum;
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
@@ -172,13 +298,17 @@ const PDFEditorContent = () => {
     ctx.moveTo(x, y);
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current || !ctx || !canvasRef.current || !drawMode)
-      return;
+  const draw = (pageNum: number, e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!drawMode || !isDrawingRef.current) return;
+    if (activeDrawPageRef.current !== pageNum) return;
+
+    const canvas = annotationCanvasRefs.current[pageNum];
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
 
     e.preventDefault();
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
@@ -187,57 +317,90 @@ const PDFEditorContent = () => {
   };
 
   const stopDrawing = () => {
-    if (!ctx || !isDrawingRef.current) return;
+    const pageNum = activeDrawPageRef.current;
+    if (!isDrawingRef.current || !pageNum) return;
+
+    const canvas = annotationCanvasRefs.current[pageNum];
+    const ctx = canvas?.getContext("2d");
+    if (!ctx) return;
 
     isDrawingRef.current = false;
+    activeDrawPageRef.current = null;
     ctx.closePath();
     setHasChanges(true);
     triggerAutoSave();
   };
 
-  const triggerAutoSave = () => {
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
+  const isCanvasBlank = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return true;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return true;
 
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      savePDF(true);
-    }, 5000);
+    const { data } = ctx.getImageData(0, 0, rect.width, rect.height);
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
   };
 
   const clearCanvas = () => {
-    if (!ctx || !canvasRef.current) return;
-
     if (
       hasChanges &&
-      confirm("Möchten Sie wirklich alle Anmerkungen löschen?")
+      !confirm("Möchten Sie wirklich alle Anmerkungen löschen?")
     ) {
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      setHasChanges(false);
-    } else if (!hasChanges) {
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      return;
     }
+
+    for (const pageNum of pageNumbers) {
+      const canvas = annotationCanvasRefs.current[pageNum];
+      const ctx = canvas?.getContext("2d");
+      if (!canvas || !ctx) continue;
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+    }
+
+    setHasChanges(false);
   };
 
   const savePDF = async (isAutoSave = false) => {
-    if (!canvasRef.current || !filename || !hasChanges) return;
+    if (!filename || !hasChanges) return;
 
     setSaving(true);
     setSaveStatus("saving");
 
     try {
-      const blob = await new Promise<Blob>((resolve) => {
-        canvasRef.current!.toBlob((blob) => {
-          resolve(blob!);
-        }, "image/png");
-      });
-
       const formData = new FormData();
-      formData.append("annotationImage", blob, "annotations.png");
       formData.append("originalFilename", filename);
 
       if (invoiceId) {
         formData.append("invoiceId", invoiceId);
+      }
+
+      let attachedPages = 0;
+
+      for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
+        const canvas = annotationCanvasRefs.current[pageNum];
+        if (!canvas || isCanvasBlank(canvas)) continue;
+
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((b) => resolve(b), "image/png");
+        });
+
+        if (!blob) continue;
+
+        formData.append(
+          `annotationPage_${pageNum}`,
+          blob,
+          `annotation_p${pageNum}.png`,
+        );
+        attachedPages += 1;
+      }
+
+      if (attachedPages === 0) {
+        setSaveStatus("idle");
+        setSaving(false);
+        return;
       }
 
       const response = await fetch("/api/admin/saveannotatedpdf", {
@@ -265,13 +428,38 @@ const PDFEditorContent = () => {
     } catch (error) {
       console.error("Error saving PDF:", error);
       setSaveStatus("idle");
-
       if (!isAutoSave) {
         alert("Fehler beim Speichern des PDFs");
       }
     } finally {
       setSaving(false);
     }
+  };
+
+  const scrollToPage = (pageNum: number) => {
+    const scroller = mainScrollRef.current;
+    const pageEl = pageWrapperRefs.current[pageNum];
+    if (!scroller || !pageEl) return;
+
+    scroller.scrollTo({
+      top: pageEl.offsetTop - 10,
+      behavior: "smooth",
+    });
+    setCurrentPage(pageNum);
+  };
+
+  const downloadMergedPDF = () => {
+    if (!mergedPdfUrl || !filename) return;
+
+    const anchor = document.createElement("a");
+    anchor.href = `${mergedPdfUrl}?t=${Date.now()}`;
+    anchor.download = filename;
+    anchor.click();
+  };
+
+  const printMergedPDF = () => {
+    if (!mergedPdfUrl) return;
+    window.open(`${mergedPdfUrl}?t=${Date.now()}`, "_blank");
   };
 
   return (
@@ -289,7 +477,7 @@ const PDFEditorContent = () => {
           padding: "10px 20px",
           backgroundColor: "#1e1e1e",
           display: "flex",
-          gap: "15px",
+          gap: "12px",
           alignItems: "center",
           borderBottom: "1px solid #444",
           flexWrap: "wrap",
@@ -320,7 +508,7 @@ const PDFEditorContent = () => {
             (hasChanges ? "● Nicht gespeichert" : "○ Keine Änderungen")}
         </div>
 
-        {!annotationsLoaded && (
+        {(!annotationsLoaded || isRendering) && (
           <div
             style={{
               padding: "6px 12px",
@@ -330,9 +518,85 @@ const PDFEditorContent = () => {
               fontSize: "12px",
             }}
           >
-            ⟳ Lade Anmerkungen...
+            ⟳ Lade PDF...
           </div>
         )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#444",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            ◀
+          </button>
+          <span
+            style={{ color: "white", minWidth: "64px", textAlign: "center" }}
+          >
+            {currentPage} / {numPages || 1}
+          </span>
+          <button
+            onClick={() =>
+              scrollToPage(Math.min(numPages || 1, currentPage + 1))
+            }
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#444",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            ▶
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            onClick={() =>
+              setZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))
+            }
+            disabled={isRendering}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#444",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: isRendering ? "not-allowed" : "pointer",
+            }}
+          >
+            -
+          </button>
+          <span
+            style={{ color: "white", minWidth: "54px", textAlign: "center" }}
+          >
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={() =>
+              setZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))
+            }
+            disabled={isRendering}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#444",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: isRendering ? "not-allowed" : "pointer",
+            }}
+          >
+            +
+          </button>
+        </div>
 
         <div style={{ marginLeft: "auto" }} />
 
@@ -349,7 +613,7 @@ const PDFEditorContent = () => {
             fontSize: "14px",
           }}
           title={
-            drawMode ? "Klicken für Scrollmodus" : "Klicken für Zeichenmodus"
+            drawMode ? "Klicken fur Scrollmodus" : "Klicken fur Zeichenmodus"
           }
         >
           {drawMode ? "✏️ Zeichenmodus" : "👆 Scrollmodus"}
@@ -443,7 +707,7 @@ const PDFEditorContent = () => {
             cursor: !drawMode ? "not-allowed" : "pointer",
           }}
         >
-          🗑️ Löschen
+          🗑️ Loschen
         </button>
 
         <button
@@ -464,6 +728,36 @@ const PDFEditorContent = () => {
         </button>
 
         <button
+          onClick={downloadMergedPDF}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#2f6cbe",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          ⬇️ Download
+        </button>
+
+        <button
+          onClick={printMergedPDF}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#3b3b3b",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          🖨️ Print
+        </button>
+
+        <button
           onClick={() => window.close()}
           style={{
             padding: "8px 16px",
@@ -474,65 +768,102 @@ const PDFEditorContent = () => {
             cursor: "pointer",
           }}
         >
-          ✖️ Schließen
+          ✖️ SchlieBen
         </button>
       </div>
 
-      <div style={{ flex: 1, position: "relative" }}>
+      <div style={{ flex: 1, position: "relative", display: "flex" }}>
         <div
-          ref={containerRef}
           style={{
-            position: "absolute",
-            inset: 0,
-            overflow: "auto",
-            backgroundColor: "#525252",
+            width: "190px",
+            backgroundColor: "#2b2d33",
+            borderRight: "1px solid #444",
+            overflowY: "auto",
+            padding: "12px 10px",
           }}
         >
-          {pdfUrl && (
-            <div
+          {pageNumbers.map((pageNum) => (
+            <button
+              key={`thumb-${pageNum}`}
+              onClick={() => scrollToPage(pageNum)}
               style={{
-                position: "relative",
                 width: "100%",
-                minHeight: "100%",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-start",
-                padding: "20px",
+                border:
+                  currentPage === pageNum
+                    ? "2px solid #3b82f6"
+                    : "1px solid #555",
+                backgroundColor: "#1f232b",
+                borderRadius: "6px",
+                padding: "8px",
+                marginBottom: "12px",
+                cursor: "pointer",
               }}
             >
+              <canvas
+                ref={(el) => {
+                  thumbCanvasRefs.current[pageNum] = el;
+                }}
+                style={{
+                  display: "block",
+                  margin: "0 auto",
+                  background: "white",
+                }}
+              />
               <div
+                style={{ color: "white", fontSize: "12px", marginTop: "6px" }}
+              >
+                {pageNum}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div
+          ref={mainScrollRef}
+          style={{
+            flex: 1,
+            overflow: "auto",
+            backgroundColor: "#525252",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            {pageNumbers.map((pageNum) => (
+              <div
+                key={`page-${pageNum}`}
+                ref={(el) => {
+                  pageWrapperRefs.current[pageNum] = el;
+                }}
                 style={{
                   position: "relative",
-                  width: "100%",
-                  maxWidth: "210mm",
-                  minHeight: "297mm",
+                  marginBottom: "16px",
+                  backgroundColor: "white",
                 }}
               >
-                <iframe
-                  ref={iframeRef}
-                  src={pdfUrl}
-                  style={{
-                    width: "100%",
-                    height: "297mm",
-                    border: "none",
-                    display: "block",
-                    backgroundColor: "white",
+                <canvas
+                  ref={(el) => {
+                    pageCanvasRefs.current[pageNum] = el;
                   }}
+                  style={{ display: "block" }}
                 />
 
                 <canvas
-                  ref={canvasRef}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
+                  ref={(el) => {
+                    annotationCanvasRefs.current[pageNum] = el;
+                  }}
+                  onMouseDown={(e) => startDrawing(pageNum, e)}
+                  onMouseMove={(e) => draw(pageNum, e)}
                   onMouseUp={stopDrawing}
                   onMouseLeave={stopDrawing}
                   style={{
                     position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "297mm",
-                    zIndex: 2,
+                    inset: 0,
                     cursor: drawMode
                       ? tool === "pen"
                         ? "crosshair"
@@ -540,15 +871,15 @@ const PDFEditorContent = () => {
                       : "default",
                     pointerEvents: drawMode ? "auto" : "none",
                     touchAction: "none",
-                    border: drawMode
-                      ? "2px solid rgba(0, 160, 0, 0.5)"
-                      : "none",
-                    transform: `translate(${-iframeScrollOffset.x}px, ${-iframeScrollOffset.y}px)`,
+                    border:
+                      drawMode && currentPage === pageNum
+                        ? "2px solid rgba(0, 160, 0, 0.5)"
+                        : "none",
                   }}
                 />
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
     </div>

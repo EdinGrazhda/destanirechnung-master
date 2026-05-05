@@ -1,36 +1,70 @@
-import { writeFile, readFile } from "fs/promises";
+import { writeFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const annotationImage = formData.get("annotationImage") as File;
     const originalFilename = formData.get("originalFilename") as string;
 
-    if (!annotationImage || !originalFilename) {
+    if (!originalFilename) {
       return NextResponse.json(
         { message: "Fehlende erforderliche Felder" },
         { status: 400 },
       );
     }
 
-    const annotationBuffer = Buffer.from(await annotationImage.arrayBuffer());
+    const uploadDir = path.join(process.cwd(), "public", "uploaded");
+    const decodedFilename = (() => {
+      try {
+        return decodeURIComponent(originalFilename);
+      } catch {
+        return originalFilename;
+      }
+    })();
+    const safeFilename = path.basename(decodedFilename);
+    const safeBase = safeFilename.replace(/\.pdf$/i, "");
 
-    const annotationFilename = `annotation_${originalFilename.replace(".pdf", ".png")}`;
-    const annotationPath = path.join(
-      process.cwd(),
-      "public",
-      "uploaded",
-      annotationFilename,
-    );
+    let savedCount = 0;
 
-    await writeFile(annotationPath, annotationBuffer);
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("annotationPage_")) continue;
+      if (!(value instanceof File)) continue;
+
+      const page = key.replace("annotationPage_", "").trim();
+      if (!/^\d+$/.test(page)) continue;
+
+      const buffer = Buffer.from(await value.arrayBuffer());
+      const annotationFilename = `annotation_${safeBase}_p${page}.png`;
+      const annotationPath = path.join(uploadDir, annotationFilename);
+      await writeFile(annotationPath, buffer);
+      savedCount += 1;
+    }
+
+    // Backward compatibility: if client still sends single annotationImage,
+    // save it as page 1.
+    if (savedCount === 0) {
+      const legacyAnnotation = formData.get("annotationImage");
+      if (legacyAnnotation instanceof File) {
+        const buffer = Buffer.from(await legacyAnnotation.arrayBuffer());
+        const annotationFilename = `annotation_${safeBase}_p1.png`;
+        const annotationPath = path.join(uploadDir, annotationFilename);
+        await writeFile(annotationPath, buffer);
+        savedCount = 1;
+      }
+    }
+
+    if (savedCount === 0) {
+      return NextResponse.json(
+        { message: "Keine Anmerkungen zum Speichern gefunden" },
+        { status: 400 },
+      );
+    }
 
     return NextResponse.json(
       {
         message: "PDF mit Anmerkungen erfolgreich gespeichert",
-        annotationFile: annotationFilename,
+        savedPages: savedCount,
       },
       { status: 200 },
     );

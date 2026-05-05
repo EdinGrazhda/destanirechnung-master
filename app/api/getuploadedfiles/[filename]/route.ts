@@ -47,8 +47,17 @@ export async function GET(
     return new NextResponse("Filename must be specified", { status: 400 });
   }
 
+  // Decode first (handles values like uploaded%2Ffile.pdf), then strip path parts.
+  const decodedFilename = (() => {
+    try {
+      return decodeURIComponent(rawFilename);
+    } catch {
+      return rawFilename;
+    }
+  })();
+
   // Strip any directory traversal (e.g. ../../etc/passwd)
-  const fileName = path.basename(rawFilename);
+  const fileName = path.basename(decodedFilename);
   const fileExtension = fileName.split(".").pop()?.toLowerCase() ?? "";
 
   if (!ALLOWED_EXTENSIONS.has(fileExtension)) {
@@ -71,44 +80,65 @@ export async function GET(
 
   const contentType =
     contentTypeMap[fileExtension] ?? "application/octet-stream";
+  const rawMode = req.nextUrl.searchParams.get("raw") === "1";
 
-  if (fileExtension === "pdf") {
-    const annotationFilename = `annotation_${fileName.replace(".pdf", ".png")}`;
-    const annotationPath = path.join(UPLOAD_DIR, annotationFilename);
-
-    // Safety net for derived annotation path
-    if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
-      return new NextResponse("Invalid file path", { status: 400 });
-    }
-
+  if (fileExtension === "pdf" && !rawMode) {
+    const safeBase = fileName.replace(/\.pdf$/i, "");
     try {
-      await fs.promises.access(annotationPath, fs.constants.R_OK);
-
-      const [pdfBuffer, annotationBuffer] = await Promise.all([
-        fs.promises.readFile(filePath),
-        fs.promises.readFile(annotationPath),
-      ]);
-
+      const pdfBuffer = await fs.promises.readFile(filePath);
       const pdfDoc = await PDFDocument.load(pdfBuffer);
       const pages = pdfDoc.getPages();
 
-      if (pages.length > 0) {
-        const firstPage = pages[0];
-        const annotationImage = await pdfDoc.embedPng(annotationBuffer);
+      for (let i = 1; i <= pages.length; i += 1) {
+        const annotationFilename = `annotation_${safeBase}_p${i}.png`;
+        const annotationPath = path.join(UPLOAD_DIR, annotationFilename);
 
-        firstPage.drawImage(annotationImage, {
-          x: 0,
-          y: 0,
-          width: firstPage.getWidth(),
-          height: firstPage.getHeight(),
-        });
+        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
+          continue;
+        }
+
+        try {
+          await fs.promises.access(annotationPath, fs.constants.R_OK);
+          const annotationBuffer = await fs.promises.readFile(annotationPath);
+          const annotationImage = await pdfDoc.embedPng(annotationBuffer);
+          const page = pages[i - 1];
+
+          page.drawImage(annotationImage, {
+            x: 0,
+            y: 0,
+            width: page.getWidth(),
+            height: page.getHeight(),
+          });
+        } catch {
+          // Ignore missing page annotations
+        }
+      }
+
+      // Backward compatibility: apply legacy single annotation file to page 1.
+      const legacyAnnotation = `annotation_${fileName.replace(/\.pdf$/i, ".png")}`;
+      const legacyPath = path.join(UPLOAD_DIR, legacyAnnotation);
+      if (legacyPath.startsWith(UPLOAD_DIR + path.sep) && pages.length > 0) {
+        try {
+          await fs.promises.access(legacyPath, fs.constants.R_OK);
+          const annotationBuffer = await fs.promises.readFile(legacyPath);
+          const annotationImage = await pdfDoc.embedPng(annotationBuffer);
+          const firstPage = pages[0];
+
+          firstPage.drawImage(annotationImage, {
+            x: 0,
+            y: 0,
+            width: firstPage.getWidth(),
+            height: firstPage.getHeight(),
+          });
+        } catch {
+          // Ignore missing legacy annotation
+        }
       }
 
       const mergedPdfBytes = await pdfDoc.save();
       const mergedHeaders = new Headers({
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${fileName}"`,
-        // Avoid stale content after signing/saving
         "Cache-Control": "no-store",
       });
 
@@ -116,7 +146,7 @@ export async function GET(
         headers: mergedHeaders,
       });
     } catch {
-      // No annotation file or merge failed: fallback to original PDF
+      // Fallback to original PDF if merge fails
     }
   }
 
