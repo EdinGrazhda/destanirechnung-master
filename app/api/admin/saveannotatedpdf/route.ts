@@ -1,4 +1,4 @@
-import { writeFile } from "fs/promises";
+import { readdir, unlink, writeFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 
@@ -24,6 +24,21 @@ export async function POST(request: NextRequest) {
     })();
     const safeFilename = path.basename(decodedFilename);
     const safeBase = safeFilename.replace(/\.pdf$/i, "");
+    const clearAll = formData.get("clearAll") === "1";
+
+    if (clearAll) {
+      const files = await readdir(uploadDir);
+      await Promise.all(
+        files
+          .filter((f) => {
+            const perPage =
+              f.startsWith(`annotation_${safeBase}_p`) && f.endsWith(".png");
+            const legacy = f === `annotation_${safeBase}.png`;
+            return perPage || legacy;
+          })
+          .map((f) => unlink(path.join(uploadDir, f)).catch(() => undefined)),
+      );
+    }
 
     let savedCount = 0;
 
@@ -54,7 +69,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (savedCount === 0) {
+    if (savedCount === 0 && !clearAll) {
       return NextResponse.json(
         { message: "Keine Anmerkungen zum Speichern gefunden" },
         { status: 400 },
@@ -63,7 +78,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        message: "PDF mit Anmerkungen erfolgreich gespeichert",
+        message: clearAll
+          ? "Anmerkungen erfolgreich gelöscht"
+          : "PDF mit Anmerkungen erfolgreich gespeichert",
         savedPages: savedCount,
       },
       { status: 200 },
