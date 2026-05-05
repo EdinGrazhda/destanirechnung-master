@@ -173,7 +173,7 @@ export const GET = async (req: NextRequest) => {
 
     if (invoiceStatus === "dashboard") {
       const page = getSafePage(searchParams.get("invoicesPage"));
-      const pageSize = 5;
+      const pageSize = 20;
 
       const foundInvoices = await Invoice.find({})
         .sort({ createdOn: -1 })

@@ -8,8 +8,9 @@ import {
   type PDFDocumentProxy,
 } from "pdfjs-dist";
 
-GlobalWorkerOptions.workerSrc =
-  "https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs";
+// Serve the worker locally — avoids CDN round-trip and external dependency.
+// The file is copied from node_modules to public/ by the postinstall script.
+GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 const PDFEditorContent = () => {
   const searchParams = useSearchParams();

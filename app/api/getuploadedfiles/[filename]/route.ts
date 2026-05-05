@@ -19,6 +19,7 @@ const mimeTypes: Record<string, string> = {
 function isValidFilename(filename: string) {
   if (!filename) return false;
   if (filename === "let") return false;
+  if (filename === "undefined" || filename === "null") return false;
   if (filename.includes("..")) return false;
   if (filename.includes("/")) return false;
   if (filename.includes("\\")) return false;
