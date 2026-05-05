@@ -24,6 +24,7 @@ const page = () => {
     try {
       const response = await fetch(
         `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=1`,
+        { cache: "no-store" },
       );
       const json_res = await response.json();
       if (response.ok) {
@@ -41,6 +42,7 @@ const page = () => {
     try {
       const response = await fetch(
         `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${page}`,
+        { cache: "no-store" },
       );
       const json_res = await response.json();
       if (response.ok) {
@@ -56,7 +58,9 @@ const page = () => {
 
   const loadDashboardInvoicesCounts = async () => {
     try {
-      const response = await fetch("/api/admin/invoicecounter");
+      const response = await fetch("/api/admin/invoicecounter", {
+        cache: "no-store",
+      });
       const json_res = await response.json();
       if (response.ok) {
         setApprovedInvoicesCount(json_res.approvedInvoicesCount);

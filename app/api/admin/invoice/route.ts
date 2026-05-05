@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { pipeline } from "stream";
+import { pipeline, Readable } from "stream";
 import { promisify } from "util";
 import { connectDB } from "@/utils/dbConnect";
 import { v4 as uuidv4 } from "uuid";
@@ -11,6 +11,7 @@ const pump = promisify(pipeline);
 
 const acceptedExtensions = ["png", "jpg", "jpeg", "pdf", "xls", "xlsx"];
 const uploadDir = path.join(process.cwd(), "public", "uploaded");
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 function getSafePage(value: string | null) {
   const page = Number(value);
@@ -54,6 +55,13 @@ export const POST = async (req: NextRequest) => {
       );
     }
 
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { message: "File is too large. Maximum allowed size is 50 MB." },
+        { status: 413 },
+      );
+    }
+
     const fileExtension = file.name.split(".").pop()?.toLowerCase();
 
     if (!fileExtension || !acceptedExtensions.includes(fileExtension)) {
@@ -84,8 +92,11 @@ export const POST = async (req: NextRequest) => {
     const invoiceSaveFile = `${uuidv4()}.${fileExtension}`;
     const filePath = path.join(uploadDir, invoiceSaveFile);
 
+    // Readable.fromWeb() correctly bridges the Web ReadableStream (from File.stream())\n    // to a Node.js Readable so pipeline doesn't crash on large files.
     await pump(
-      file.stream() as unknown as NodeJS.ReadableStream,
+      Readable.fromWeb(
+        file.stream() as unknown as import("stream/web").ReadableStream<Uint8Array>,
+      ),
       fs.createWriteStream(filePath),
     );
 
@@ -134,7 +145,8 @@ export const GET = async (req: NextRequest) => {
         {
           status: 200,
           headers: {
-            "Cache-Control": "public, max-age=15, stale-while-revalidate=30",
+            // Admin live data — never cache in browser so new invoices appear immediately.
+            "Cache-Control": "no-store",
           },
         },
       );
