@@ -13,9 +13,12 @@ GlobalWorkerOptions.workerSrc =
 
 const PDFEditorContent = () => {
   const searchParams = useSearchParams();
-  const filename = searchParams.get("file");
+  const rawFile = searchParams.get("file");
   const invoiceId = searchParams.get("id");
 
+  const [filename, setFilename] = useState<string | null>(
+    rawFile && rawFile !== "undefined" && rawFile !== "null" ? rawFile : null,
+  );
   const [pdfUrl, setPdfUrl] = useState("");
   const [mergedPdfUrl, setMergedPdfUrl] = useState("");
   const [drawColor, setDrawColor] = useState("#ff0000");
@@ -56,6 +59,17 @@ const PDFEditorContent = () => {
     () => Array.from({ length: numPages }, (_, i) => i + 1),
     [numPages],
   );
+
+  // If filename is missing, resolve it from the DB using the invoice ID.
+  useEffect(() => {
+    if (filename || !invoiceId) return;
+    fetch(`/api/admin/invoice?invoiceId=${encodeURIComponent(invoiceId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.fileName) setFilename(data.fileName);
+      })
+      .catch(() => {});
+  }, [filename, invoiceId]);
 
   useEffect(() => {
     if (filename) {
@@ -779,9 +793,7 @@ const PDFEditorContent = () => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <label style={{ color: !drawMode ? "#666" : "white" }}>
-            Breite:
-          </label>
+          <label style={{ color: !drawMode ? "#666" : "white" }}>Breite:</label>
 
           <input
             type="range"

@@ -154,6 +154,23 @@ export const GET = async (req: NextRequest) => {
 
     await connectDB();
 
+    const invoiceId = searchParams.get("invoiceId");
+    if (invoiceId) {
+      const invoice = await Invoice.findById(invoiceId)
+        .select("fileName")
+        .lean();
+      if (!invoice) {
+        return NextResponse.json(
+          { message: "Invoice not found." },
+          { status: 404 },
+        );
+      }
+      return NextResponse.json(
+        { fileName: (invoice as any).fileName ?? null },
+        { status: 200 },
+      );
+    }
+
     if (invoiceStatus === "dashboard") {
       const page = getSafePage(searchParams.get("invoicesPage"));
       const pageSize = 5;
