@@ -99,7 +99,15 @@ export async function GET(request: NextRequest) {
         hasAnnotations: Object.keys(pages).length > 0,
         pages,
       },
-      { status: 200 },
+      {
+        status: 200,
+        headers: {
+          // Annotation PNGs rarely change mid-session.
+          // 60 s fresh + 60 s stale-while-revalidate eliminates repeated
+          // multi-MB base64 downloads on every editor open.
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=60",
+        },
+      },
     );
   } catch (error) {
     console.error("Error loading annotations:", error);

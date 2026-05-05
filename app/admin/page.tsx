@@ -37,10 +37,10 @@ const page = () => {
     }
   };
 
-  const loadExtraDashboardInvoices = async () => {
+  const loadExtraDashboardInvoices = async (page: number) => {
     try {
       const response = await fetch(
-        `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${invoicesPageState}`,
+        `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${page}`,
       );
       const json_res = await response.json();
       if (response.ok) {
@@ -432,8 +432,9 @@ const page = () => {
           <div
             className="dash-load-more"
             onClick={() => {
-              setInvoicesPageState(invoicesPageState + 1);
-              loadExtraDashboardInvoices();
+              const nextPage = invoicesPageState + 1;
+              setInvoicesPageState(nextPage);
+              loadExtraDashboardInvoices(invoicesPageState);
             }}
           >
             <p>Alle Anzeigen</p>

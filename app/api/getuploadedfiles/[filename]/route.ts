@@ -34,8 +34,10 @@ type MergedPdfCacheEntry = {
   createdAt: number;
 };
 
-const MERGED_PDF_CACHE_TTL_MS = 5 * 60 * 1000;
-const MERGED_PDF_CACHE_MAX_ENTRIES = 30;
+// Keep the merged-PDF cache small: large PDFs with embedded PNG annotations
+// can be 5–20 MB each. 5 entries × 20 MB = 100 MB worst case, safe on a VPS.
+const MERGED_PDF_CACHE_TTL_MS = 2 * 60 * 1000;
+const MERGED_PDF_CACHE_MAX_ENTRIES = 5;
 
 const mergedPdfCache =
   (
