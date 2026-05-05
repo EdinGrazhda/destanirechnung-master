@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const rawFilename = searchParams.get("filename");
+    const pageCountParam = searchParams.get("pages");
 
     if (!rawFilename) {
       return NextResponse.json(
@@ -29,28 +30,51 @@ export async function GET(request: NextRequest) {
     // Strip any directory traversal components
     const safeFilename = path.basename(decodedFilename);
     const safeBase = safeFilename.replace(/\.pdf$/i, "");
+    const requestedPageCount = Number(pageCountParam);
+    const hasValidPageCount =
+      Number.isInteger(requestedPageCount) && requestedPageCount > 0;
 
-    const files = await fs.readdir(UPLOAD_DIR);
     const pages: Record<string, string> = {};
 
-    for (const file of files) {
-      const match = file.match(
-        new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i"),
-      );
-      if (!match) continue;
+    if (hasValidPageCount) {
+      for (let i = 1; i <= requestedPageCount; i += 1) {
+        const annotationPath = path.join(
+          UPLOAD_DIR,
+          `annotation_${safeBase}_p${i}.png`,
+        );
+        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) continue;
 
-      const page = match[1];
-      const annotationPath = path.join(UPLOAD_DIR, file);
+        try {
+          await access(annotationPath, constants.R_OK);
+          const annotationBuffer = await readFile(annotationPath);
+          pages[String(i)] =
+            `data:image/png;base64,${annotationBuffer.toString("base64")}`;
+        } catch {
+          // Ignore missing page annotations
+        }
+      }
+    } else {
+      const files = await fs.readdir(UPLOAD_DIR);
 
-      if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) continue;
+      for (const file of files) {
+        const match = file.match(
+          new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i"),
+        );
+        if (!match) continue;
 
-      try {
-        await access(annotationPath, constants.R_OK);
-        const annotationBuffer = await readFile(annotationPath);
-        pages[page] =
-          `data:image/png;base64,${annotationBuffer.toString("base64")}`;
-      } catch {
-        // Ignore unreadable files and continue
+        const page = match[1];
+        const annotationPath = path.join(UPLOAD_DIR, file);
+
+        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) continue;
+
+        try {
+          await access(annotationPath, constants.R_OK);
+          const annotationBuffer = await readFile(annotationPath);
+          pages[page] =
+            `data:image/png;base64,${annotationBuffer.toString("base64")}`;
+        } catch {
+          // Ignore unreadable files and continue
+        }
       }
     }
 

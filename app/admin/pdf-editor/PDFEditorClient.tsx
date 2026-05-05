@@ -162,7 +162,7 @@ const PDFEditorContent = () => {
 
       try {
         const response = await fetch(
-          `/api/admin/getannotations?filename=${encodeURIComponent(filename)}`,
+          `/api/admin/getannotations?filename=${encodeURIComponent(filename)}&pages=${numPages}`,
         );
         const data = await response.json();
 

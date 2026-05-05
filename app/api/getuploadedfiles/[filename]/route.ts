@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
 import { isRateLimited } from "@/utils/rateLimit";
 import { PDFDocument } from "pdf-lib";
 
@@ -26,6 +27,84 @@ const contentTypeMap: Record<string, string> = {
   xls: "application/vnd.ms-excel",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
+
+type MergedPdfCacheEntry = {
+  fingerprint: string;
+  bytes: Buffer;
+  createdAt: number;
+};
+
+const MERGED_PDF_CACHE_TTL_MS = 5 * 60 * 1000;
+const MERGED_PDF_CACHE_MAX_ENTRIES = 30;
+
+const mergedPdfCache =
+  (
+    globalThis as typeof globalThis & {
+      __mergedPdfCache?: Map<string, MergedPdfCacheEntry>;
+    }
+  ).__mergedPdfCache ?? new Map<string, MergedPdfCacheEntry>();
+
+(
+  globalThis as typeof globalThis & {
+    __mergedPdfCache?: Map<string, MergedPdfCacheEntry>;
+  }
+).__mergedPdfCache = mergedPdfCache;
+
+function pruneMergedPdfCache(now: number) {
+  for (const [key, value] of mergedPdfCache.entries()) {
+    if (now - value.createdAt > MERGED_PDF_CACHE_TTL_MS) {
+      mergedPdfCache.delete(key);
+    }
+  }
+
+  while (mergedPdfCache.size > MERGED_PDF_CACHE_MAX_ENTRIES) {
+    const oldestKey = mergedPdfCache.keys().next().value;
+    if (!oldestKey) break;
+    mergedPdfCache.delete(oldestKey);
+  }
+}
+
+async function collectAnnotationFiles(safeBase: string) {
+  const allUploadFiles = await fs.promises.readdir(UPLOAD_DIR);
+  const perPagePattern = new RegExp(
+    `^annotation_${safeBase}_p\\d+\\.png$`,
+    "i",
+  );
+  const legacyName = `annotation_${safeBase}.png`;
+
+  return allUploadFiles
+    .filter((file) => perPagePattern.test(file) || file === legacyName)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function buildFingerprint(
+  sourceStat: fs.Stats,
+  annotationStats: Array<{ file: string; stat: fs.Stats }>,
+) {
+  return [
+    `${sourceStat.mtimeMs}:${sourceStat.size}`,
+    ...annotationStats.map(
+      ({ file, stat }) => `${file}:${stat.mtimeMs}:${stat.size}`,
+    ),
+  ].join("|");
+}
+
+function toPageNumber(file: string, safeBase: string) {
+  const match = file.match(
+    new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i"),
+  );
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function pdfResponse(fileName: string, bytes: Buffer, cacheControl: string) {
+  const headers = new Headers({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `inline; filename="${fileName}"`,
+    "Cache-Control": cacheControl,
+  });
+
+  return new NextResponse(new Uint8Array(bytes), { headers });
+}
 
 export async function GET(
   req: NextRequest,
@@ -85,66 +164,91 @@ export async function GET(
   if (fileExtension === "pdf" && !rawMode) {
     const safeBase = fileName.replace(/\.pdf$/i, "");
     try {
+      const sourceStat = await fs.promises.stat(filePath);
+      const annotationFiles = await collectAnnotationFiles(safeBase);
+
+      // Fast path: if there are no annotations, skip expensive PDF merge.
+      if (annotationFiles.length === 0) {
+        const originalPdf = await fs.promises.readFile(filePath);
+        return pdfResponse(
+          fileName,
+          originalPdf,
+          "public, max-age=300, stale-while-revalidate=60",
+        );
+      }
+
+      const annotationStats = (
+        await Promise.all(
+          annotationFiles.map(async (file) => {
+            const annotationPath = path.join(UPLOAD_DIR, file);
+            if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
+              return null;
+            }
+
+            try {
+              const stat = await fs.promises.stat(annotationPath);
+              return { file, stat };
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((value): value is { file: string; stat: fs.Stats } =>
+        Boolean(value),
+      );
+
+      const fingerprint = buildFingerprint(sourceStat, annotationStats);
+      const cacheKey = fileName;
+      const now = Date.now();
+
+      pruneMergedPdfCache(now);
+
+      const cached = mergedPdfCache.get(cacheKey);
+      if (cached && cached.fingerprint === fingerprint) {
+        cached.createdAt = now;
+        mergedPdfCache.delete(cacheKey);
+        mergedPdfCache.set(cacheKey, cached);
+        return pdfResponse(
+          fileName,
+          cached.bytes,
+          "public, max-age=60, stale-while-revalidate=60",
+        );
+      }
+
       const pdfBuffer = await fs.promises.readFile(filePath);
       const pdfDoc = await PDFDocument.load(pdfBuffer);
       const pages = pdfDoc.getPages();
 
-      for (let i = 1; i <= pages.length; i += 1) {
-        const annotationFilename = `annotation_${safeBase}_p${i}.png`;
-        const annotationPath = path.join(UPLOAD_DIR, annotationFilename);
+      for (const { file } of annotationStats) {
+        const annotationPath = path.join(UPLOAD_DIR, file);
+        const annotationBuffer = await fs.promises.readFile(annotationPath);
+        const annotationImage = await pdfDoc.embedPng(annotationBuffer);
 
-        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) {
-          continue;
-        }
+        const pageNumber = toPageNumber(file, safeBase);
+        const page = pageNumber ? pages[pageNumber - 1] : pages[0];
 
-        try {
-          await fs.promises.access(annotationPath, fs.constants.R_OK);
-          const annotationBuffer = await fs.promises.readFile(annotationPath);
-          const annotationImage = await pdfDoc.embedPng(annotationBuffer);
-          const page = pages[i - 1];
+        if (!page) continue;
 
-          page.drawImage(annotationImage, {
-            x: 0,
-            y: 0,
-            width: page.getWidth(),
-            height: page.getHeight(),
-          });
-        } catch {
-          // Ignore missing page annotations
-        }
+        page.drawImage(annotationImage, {
+          x: 0,
+          y: 0,
+          width: page.getWidth(),
+          height: page.getHeight(),
+        });
       }
 
-      // Backward compatibility: apply legacy single annotation file to page 1.
-      const legacyAnnotation = `annotation_${fileName.replace(/\.pdf$/i, ".png")}`;
-      const legacyPath = path.join(UPLOAD_DIR, legacyAnnotation);
-      if (legacyPath.startsWith(UPLOAD_DIR + path.sep) && pages.length > 0) {
-        try {
-          await fs.promises.access(legacyPath, fs.constants.R_OK);
-          const annotationBuffer = await fs.promises.readFile(legacyPath);
-          const annotationImage = await pdfDoc.embedPng(annotationBuffer);
-          const firstPage = pages[0];
-
-          firstPage.drawImage(annotationImage, {
-            x: 0,
-            y: 0,
-            width: firstPage.getWidth(),
-            height: firstPage.getHeight(),
-          });
-        } catch {
-          // Ignore missing legacy annotation
-        }
-      }
-
-      const mergedPdfBytes = await pdfDoc.save();
-      const mergedHeaders = new Headers({
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${fileName}"`,
-        "Cache-Control": "no-store",
+      const mergedBuffer = Buffer.from(await pdfDoc.save());
+      mergedPdfCache.set(cacheKey, {
+        fingerprint,
+        bytes: mergedBuffer,
+        createdAt: now,
       });
 
-      return new NextResponse(Buffer.from(mergedPdfBytes), {
-        headers: mergedHeaders,
-      });
+      return pdfResponse(
+        fileName,
+        mergedBuffer,
+        "public, max-age=60, stale-while-revalidate=60",
+      );
     } catch {
       // Fallback to original PDF if merge fails
     }
@@ -158,5 +262,7 @@ export async function GET(
   });
 
   const fileStream = fs.createReadStream(filePath);
-  return new NextResponse(fileStream as any, { headers });
+  return new NextResponse(Readable.toWeb(fileStream) as ReadableStream, {
+    headers,
+  });
 }
