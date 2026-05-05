@@ -13,6 +13,9 @@ const acceptedExtensions = ["png", "jpg", "jpeg", "pdf", "xls", "xlsx"];
 const uploadDir = path.join(process.cwd(), "public", "uploaded");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
+// Gives the route 30 s to respond; prevents nginx 502 on slow uploads.
+export const maxDuration = 30;
+
 function getSafePage(value: string | null) {
   const page = Number(value);
   return Number.isInteger(page) && page > 0 ? page : 1;
@@ -25,7 +28,17 @@ function getSafeLimit(value: string | null) {
 }
 
 export const POST = async (req: NextRequest) => {
+  let writtenFilePath: string | null = null;
   try {
+    // Reject oversized requests before buffering the body to prevent OOM crashes → 502.
+    const contentLength = req.headers.get("content-length");
+    if (contentLength !== null && parseInt(contentLength, 10) > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { message: "File is too large. Maximum allowed size is 50 MB." },
+        { status: 413 },
+      );
+    }
+
     const formData = await req.formData();
 
     const company = formData.get("company");
@@ -91,6 +104,7 @@ export const POST = async (req: NextRequest) => {
 
     const invoiceSaveFile = `${uuidv4()}.${fileExtension}`;
     const filePath = path.join(uploadDir, invoiceSaveFile);
+    writtenFilePath = filePath; // track so catch can delete an orphaned file on error
 
     // Readable.fromWeb() correctly bridges the Web ReadableStream (from File.stream())\n    // to a Node.js Readable so pipeline doesn't crash on large files.
     await pump(
@@ -109,11 +123,21 @@ export const POST = async (req: NextRequest) => {
       createdOn: new Date().toISOString(),
     });
 
+    writtenFilePath = null; // DB record created — no cleanup needed
     return NextResponse.json(
       { message: "Success", newSavedInvoice },
       { status: 200 },
     );
   } catch (error) {
+    // Remove any partially written file to avoid orphaned files on disk.
+    if (writtenFilePath) {
+      try {
+        await fs.promises.unlink(writtenFilePath);
+      } catch {
+        // File may not exist yet if the error occurred before pump completed.
+      }
+    }
+
     console.error("Invoice POST error:", error);
 
     return NextResponse.json(

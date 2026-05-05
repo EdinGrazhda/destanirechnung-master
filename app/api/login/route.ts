@@ -11,7 +11,7 @@ if (!JWT_SECRET_KEY) {
   throw new Error("JWT_SECRET_KEY environment variable is not defined");
 }
 
-export const POST = async (req: NextRequest, res: NextResponse) => {
+export const POST = async (req: NextRequest) => {
   try {
     // Rate limit: 10 login attempts per minute per IP (brute-force protection)
     const ip =
