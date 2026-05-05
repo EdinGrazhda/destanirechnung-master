@@ -1,8 +1,7 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
+import { createReadStream } from "fs";
 
 const uploadedDir = path.join(process.cwd(), "public", "uploaded");
 
@@ -53,22 +52,63 @@ export async function GET(
       );
     }
 
+    let fileStat: Awaited<ReturnType<typeof fs.stat>>;
     try {
-      await fs.access(normalizedFilePath);
+      fileStat = await fs.stat(normalizedFilePath);
     } catch {
       return NextResponse.json({ message: "File not found." }, { status: 404 });
     }
 
-    const fileBuffer = await fs.readFile(normalizedFilePath);
     const ext = path.extname(filename).toLowerCase();
     const contentType = mimeTypes[ext] || "application/octet-stream";
 
-    return new NextResponse(new Uint8Array(fileBuffer), {
+    // ETag based on mtime + size — stable, cheap to compute.
+    const etag = `"${fileStat.mtimeMs.toString(36)}-${fileStat.size.toString(36)}"`;
+    const lastModified = fileStat.mtime.toUTCString();
+
+    // Honour conditional requests so repeat loads return 304 (no body transfer).
+    const ifNoneMatch = req.headers.get("if-none-match");
+    const ifModifiedSince = req.headers.get("if-modified-since");
+    if (
+      ifNoneMatch === etag ||
+      (ifModifiedSince && new Date(ifModifiedSince) >= fileStat.mtime)
+    ) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          ETag: etag,
+          "Last-Modified": lastModified,
+          "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        },
+      });
+    }
+
+    // Stream the file — never load the whole PDF into memory at once.
+    const nodeStream = createReadStream(normalizedFilePath);
+    const readableStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on("data", (chunk: string | Buffer) =>
+          controller.enqueue(
+            new Uint8Array(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+          ),
+        );
+        nodeStream.on("end", () => controller.close());
+        nodeStream.on("error", (err) => controller.error(err));
+      },
+      cancel() {
+        nodeStream.destroy();
+      },
+    });
+
+    return new NextResponse(readableStream, {
       status: 200,
       headers: {
         "Content-Type": contentType,
+        "Content-Length": String(fileStat.size),
         "Content-Disposition": `inline; filename="${filename}"`,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        ETag: etag,
+        "Last-Modified": lastModified,
       },
     });
   } catch (error) {

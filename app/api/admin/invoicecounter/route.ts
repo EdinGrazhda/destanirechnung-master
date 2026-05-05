@@ -29,9 +29,9 @@ export const GET = async () => {
       {
         status: 200,
         headers: {
-          // Browser caches counts for 30 s; serves stale for up to 60 s while revalidating.
+          // Browser caches counts for 60 s; serves stale for up to 120 s while revalidating.
           // Stops the dashboard from hitting MongoDB on every re-render.
-          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+          "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
         },
       },
     );
