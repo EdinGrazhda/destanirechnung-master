@@ -47,6 +47,11 @@ const PDFEditorContent = () => {
   const activeDrawPageRef = useRef<number | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const dirtyPagesRef = useRef<Set<number>>(new Set());
+  const stopDrawingRefCb = useRef<() => void>(() => {});
+  const scrollRafRef = useRef<number | null>(null);
+  const currentPdfDocRef = useRef<PDFDocumentProxy | null>(null);
+
   const pageNumbers = useMemo(
     () => Array.from({ length: numPages }, (_, i) => i + 1),
     [numPages],
@@ -61,17 +66,38 @@ const PDFEditorContent = () => {
   }, [filename]);
 
   useEffect(() => {
+    return () => {
+      if (currentPdfDocRef.current) {
+        currentPdfDocRef.current.destroy().catch(() => {});
+        currentPdfDocRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
 
     const loadPdf = async () => {
       if (!pdfUrl) return;
+
       try {
         setIsRendering(true);
         setAnnotationsLoaded(false);
+
         loadingTask = getDocument(pdfUrl);
         const loaded = await loadingTask.promise;
-        if (cancelled) return;
+
+        if (cancelled) {
+          loaded.destroy();
+          return;
+        }
+
+        if (currentPdfDocRef.current) {
+          currentPdfDocRef.current.destroy().catch(() => {});
+        }
+
+        currentPdfDocRef.current = loaded;
         setPdfDoc(loaded);
         setNumPages(loaded.numPages);
         setCurrentPage(1);
@@ -95,7 +121,9 @@ const PDFEditorContent = () => {
 
     const renderPdfAndAnnotations = async () => {
       if (!pdfDoc || numPages === 0) return;
+
       setIsRendering(true);
+      dirtyPagesRef.current.clear();
 
       for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
         if (cancelled) return;
@@ -105,14 +133,18 @@ const PDFEditorContent = () => {
         const ratio = window.devicePixelRatio || 1;
 
         const pageCanvas = pageCanvasRefs.current[pageNum];
+
         if (pageCanvas) {
           pageCanvas.width = Math.floor(viewport.width * ratio);
           pageCanvas.height = Math.floor(viewport.height * ratio);
           pageCanvas.style.width = `${viewport.width}px`;
           pageCanvas.style.height = `${viewport.height}px`;
+
           const pctx = pageCanvas.getContext("2d");
+
           if (pctx) {
             pctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
             await page.render({
               canvasContext: pctx,
               canvas: pageCanvas,
@@ -122,12 +154,15 @@ const PDFEditorContent = () => {
         }
 
         const annotationCanvas = annotationCanvasRefs.current[pageNum];
+
         if (annotationCanvas) {
           annotationCanvas.width = Math.floor(viewport.width * ratio);
           annotationCanvas.height = Math.floor(viewport.height * ratio);
           annotationCanvas.style.width = `${viewport.width}px`;
           annotationCanvas.style.height = `${viewport.height}px`;
+
           const actx = annotationCanvas.getContext("2d");
+
           if (actx) {
             actx.setTransform(ratio, 0, 0, ratio, 0, 0);
             actx.lineCap = "round";
@@ -136,15 +171,20 @@ const PDFEditorContent = () => {
         }
 
         const thumbCanvas = thumbCanvasRefs.current[pageNum];
+
         if (thumbCanvas) {
           const thumbViewport = page.getViewport({ scale: 0.2 });
+
           thumbCanvas.width = Math.floor(thumbViewport.width * ratio);
           thumbCanvas.height = Math.floor(thumbViewport.height * ratio);
           thumbCanvas.style.width = `${thumbViewport.width}px`;
           thumbCanvas.style.height = `${thumbViewport.height}px`;
+
           const tctx = thumbCanvas.getContext("2d");
+
           if (tctx) {
             tctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
             await page.render({
               canvasContext: tctx,
               canvas: thumbCanvas,
@@ -162,26 +202,35 @@ const PDFEditorContent = () => {
 
       try {
         const response = await fetch(
-          `/api/admin/getannotations?filename=${encodeURIComponent(filename)}&pages=${numPages}`,
+          `/api/admin/getannotations?filename=${encodeURIComponent(
+            filename,
+          )}&pages=${numPages}`,
         );
+
         const data = await response.json();
 
         if (data?.pages) {
           for (const [pageKey, dataUrl] of Object.entries(data.pages)) {
             const pageNum = Number(pageKey);
             const annotationCanvas = annotationCanvasRefs.current[pageNum];
+
             if (!annotationCanvas || typeof dataUrl !== "string") continue;
 
             const image = new Image();
+
             await new Promise<void>((resolve) => {
               image.onload = () => {
                 const actx = annotationCanvas.getContext("2d");
+
                 if (actx) {
                   const rect = annotationCanvas.getBoundingClientRect();
                   actx.drawImage(image, 0, 0, rect.width, rect.height);
                 }
+
+                dirtyPagesRef.current.add(pageNum);
                 resolve();
               };
+
               image.onerror = () => resolve();
               image.src = dataUrl;
             });
@@ -221,44 +270,62 @@ const PDFEditorContent = () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
+
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [hasChanges, saving]);
 
   useEffect(() => {
-    const handleWindowMouseUp = () => {
-      stopDrawing();
-    };
+    const handleWindowMouseUp = () => stopDrawingRefCb.current();
 
     window.addEventListener("mouseup", handleWindowMouseUp);
+
     return () => window.removeEventListener("mouseup", handleWindowMouseUp);
-  });
+  }, []);
 
   useEffect(() => {
     const scroller = mainScrollRef.current;
+
     if (!scroller) return;
 
     const onScroll = () => {
-      const scrollerRect = scroller.getBoundingClientRect();
-      let nearestPage = 1;
-      let nearestDistance = Number.POSITIVE_INFINITY;
+      if (scrollRafRef.current !== null) return;
 
-      for (let i = 1; i <= numPages; i += 1) {
-        const pageEl = pageWrapperRefs.current[i];
-        if (!pageEl) continue;
-        const pageRect = pageEl.getBoundingClientRect();
-        const dist = Math.abs(pageRect.top - scrollerRect.top);
-        if (dist < nearestDistance) {
-          nearestDistance = dist;
-          nearestPage = i;
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+
+        const scrollerRect = scroller.getBoundingClientRect();
+        let nearestPage = 1;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+
+        for (let i = 1; i <= numPages; i += 1) {
+          const pageEl = pageWrapperRefs.current[i];
+
+          if (!pageEl) continue;
+
+          const pageRect = pageEl.getBoundingClientRect();
+          const dist = Math.abs(pageRect.top - scrollerRect.top);
+
+          if (dist < nearestDistance) {
+            nearestDistance = dist;
+            nearestPage = i;
+          }
         }
-      }
 
-      setCurrentPage(nearestPage);
+        setCurrentPage(nearestPage);
+      });
     };
 
     scroller.addEventListener("scroll", onScroll);
-    return () => scroller.removeEventListener("scroll", onScroll);
+
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, [numPages]);
 
   const triggerAutoSave = () => {
@@ -279,11 +346,14 @@ const PDFEditorContent = () => {
 
     const canvas = annotationCanvasRefs.current[pageNum];
     const ctx = canvas?.getContext("2d");
+
     if (!canvas || !ctx) return;
 
     e.preventDefault();
+
     isDrawingRef.current = true;
     activeDrawPageRef.current = pageNum;
+    dirtyPagesRef.current.add(pageNum);
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -308,6 +378,7 @@ const PDFEditorContent = () => {
 
     const canvas = annotationCanvasRefs.current[pageNum];
     const ctx = canvas?.getContext("2d");
+
     if (!canvas || !ctx) return;
 
     e.preventDefault();
@@ -322,31 +393,24 @@ const PDFEditorContent = () => {
 
   const stopDrawing = () => {
     const pageNum = activeDrawPageRef.current;
+
     if (!isDrawingRef.current || !pageNum) return;
 
     const canvas = annotationCanvasRefs.current[pageNum];
     const ctx = canvas?.getContext("2d");
+
     if (!ctx) return;
 
     isDrawingRef.current = false;
     activeDrawPageRef.current = null;
+
     ctx.closePath();
+
     setHasChanges(true);
     triggerAutoSave();
   };
 
-  const isCanvasBlank = (canvas: HTMLCanvasElement) => {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return true;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return true;
-
-    const { data } = ctx.getImageData(0, 0, rect.width, rect.height);
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] !== 0) return false;
-    }
-    return true;
-  };
+  stopDrawingRefCb.current = stopDrawing;
 
   const clearCanvas = () => {
     if (
@@ -359,10 +423,14 @@ const PDFEditorContent = () => {
     for (const pageNum of pageNumbers) {
       const canvas = annotationCanvasRefs.current[pageNum];
       const ctx = canvas?.getContext("2d");
+
       if (!canvas || !ctx) continue;
+
       const rect = canvas.getBoundingClientRect();
       ctx.clearRect(0, 0, rect.width, rect.height);
     }
+
+    dirtyPagesRef.current.clear();
 
     setHasChanges(true);
     setClearRequested(true);
@@ -391,7 +459,8 @@ const PDFEditorContent = () => {
 
       for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
         const canvas = annotationCanvasRefs.current[pageNum];
-        if (!canvas || isCanvasBlank(canvas)) continue;
+
+        if (!canvas || !dirtyPagesRef.current.has(pageNum)) continue;
 
         const blob = await new Promise<Blob | null>((resolve) => {
           canvas.toBlob((b) => resolve(b), "image/png");
@@ -404,6 +473,7 @@ const PDFEditorContent = () => {
           blob,
           `annotation_p${pageNum}.png`,
         );
+
         attachedPages += 1;
       }
 
@@ -439,6 +509,7 @@ const PDFEditorContent = () => {
     } catch (error) {
       console.error("Error saving PDF:", error);
       setSaveStatus("idle");
+
       if (!isAutoSave) {
         alert("Fehler beim Speichern des PDFs");
       }
@@ -450,14 +521,30 @@ const PDFEditorContent = () => {
   const scrollToPage = (pageNum: number) => {
     const scroller = mainScrollRef.current;
     const pageEl = pageWrapperRefs.current[pageNum];
+
     if (!scroller || !pageEl) return;
 
     pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
     setCurrentPage(pageNum);
   };
 
+  const isValidPdfUrl = (url: string | null) => {
+    if (!url) return false;
+    if (url === "let") return false;
+    if (url.includes("..")) return false;
+    if (url.includes("\\")) return false;
+    if (!url.includes(".pdf")) return false;
+    if (!url.startsWith("/api/getuploadedfiles/")) return false;
+
+    return true;
+  };
+
   const downloadMergedPDF = () => {
-    if (!mergedPdfUrl || !filename) return;
+    if (!isValidPdfUrl(mergedPdfUrl) || !filename) {
+      console.error("Invalid mergedPdfUrl for download:", mergedPdfUrl);
+      alert("PDF URL is invalid.");
+      return;
+    }
 
     const anchor = document.createElement("a");
     anchor.href = `${mergedPdfUrl}?t=${Date.now()}`;
@@ -466,7 +553,12 @@ const PDFEditorContent = () => {
   };
 
   const printMergedPDF = () => {
-    if (!mergedPdfUrl) return;
+    if (!isValidPdfUrl(mergedPdfUrl)) {
+      console.error("Invalid mergedPdfUrl for print:", mergedPdfUrl);
+      alert("PDF URL is invalid.");
+      return;
+    }
+
     window.open(`${mergedPdfUrl}?t=${Date.now()}`, "_blank");
   };
 
@@ -544,11 +636,13 @@ const PDFEditorContent = () => {
           >
             ◀
           </button>
+
           <span
             style={{ color: "white", minWidth: "64px", textAlign: "center" }}
           >
             {currentPage} / {numPages || 1}
           </span>
+
           <button
             onClick={() =>
               scrollToPage(Math.min(numPages || 1, currentPage + 1))
@@ -583,11 +677,13 @@ const PDFEditorContent = () => {
           >
             -
           </button>
+
           <span
             style={{ color: "white", minWidth: "54px", textAlign: "center" }}
           >
             {Math.round(zoom * 100)}%
           </span>
+
           <button
             onClick={() =>
               setZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))
@@ -667,6 +763,7 @@ const PDFEditorContent = () => {
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <label style={{ color: !drawMode ? "#666" : "white" }}>Farbe:</label>
+
           <input
             type="color"
             value={drawColor}
@@ -682,7 +779,10 @@ const PDFEditorContent = () => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <label style={{ color: !drawMode ? "#666" : "white" }}>Breite:</label>
+          <label style={{ color: !drawMode ? "#666" : "white" }}>
+            Breite:
+          </label>
+
           <input
             type="range"
             min="1"
@@ -696,6 +796,7 @@ const PDFEditorContent = () => {
               opacity: !drawMode ? 0.5 : 1,
             }}
           />
+
           <span
             style={{ color: !drawMode ? "#666" : "white", minWidth: "30px" }}
           >
@@ -817,6 +918,7 @@ const PDFEditorContent = () => {
                   background: "white",
                 }}
               />
+
               <div
                 style={{ color: "white", fontSize: "12px", marginTop: "6px" }}
               >
