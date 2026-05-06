@@ -73,7 +73,9 @@ const page = () => {
           return [...prev, ...uniqueNextInvoices];
         });
         setInvoicesPageState(page);
-        setHasMoreDashboardInvoices(nextInvoices.length === DASHBOARD_PAGE_SIZE);
+        setHasMoreDashboardInvoices(
+          nextInvoices.length === DASHBOARD_PAGE_SIZE,
+        );
       } else {
         alert(json_res.message);
       }
@@ -473,12 +475,15 @@ const page = () => {
           <div
             className="dash-load-more"
             onClick={() => {
-              if (isLoadingMoreInvoices || !canLoadMoreDashboardInvoices) return;
+              if (isLoadingMoreInvoices || !canLoadMoreDashboardInvoices)
+                return;
               loadExtraDashboardInvoices(invoicesPageState + 1);
             }}
             style={{
               opacity:
-                isLoadingMoreInvoices || !canLoadMoreDashboardInvoices ? 0.6 : 1,
+                isLoadingMoreInvoices || !canLoadMoreDashboardInvoices
+                  ? 0.6
+                  : 1,
               pointerEvents:
                 isLoadingMoreInvoices || !canLoadMoreDashboardInvoices
                   ? "none"
