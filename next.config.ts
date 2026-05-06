@@ -18,6 +18,22 @@ const nextConfig: NextConfig = {
   // server worker from loading them and avoids the uncaughtException that was
   // causing the 52-second event-loop latency spikes.
   serverExternalPackages: ["pdfjs-dist", "pdf-lib", "canvas"],
+  webpack(config, { isServer }) {
+    if (isServer) {
+      // Completely prevent pdfjs-dist and pdf-lib from being resolvable in the
+      // server-side webpack graph. Even with serverExternalPackages, webpack may
+      // still include them in the server trace if they appear in any import chain.
+      // Setting the alias to false replaces the import with an empty module,
+      // which stops the "kill[...] is not a function" / "returnNaN is not defined"
+      // uncaughtException that fires when the pdfjs worker code runs in Node.js.
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "pdfjs-dist": false,
+        "pdf-lib": false,
+      };
+    }
+    return config;
+  },
   // Tell Next.js about long-lived static assets so it applies immutable cache headers.
   async headers() {
     return [
