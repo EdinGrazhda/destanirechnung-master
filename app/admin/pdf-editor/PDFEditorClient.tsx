@@ -34,6 +34,7 @@ const PDFEditorContent = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState(1.2);
   const [isRendering, setIsRendering] = useState(false);
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
     "idle",
@@ -104,11 +105,15 @@ const PDFEditorContent = () => {
       const safeName = encodeURIComponent(filename as string);
       setPdfUrl(`/api/getuploadedfiles/${safeName}?raw=1`);
       setMergedPdfUrl(`/api/getuploadedfiles/${safeName}`);
+      setPdfLoadError(null);
       return;
     }
 
     setPdfUrl("");
     setMergedPdfUrl("");
+    setPdfDoc(null);
+    setNumPages(0);
+    setPdfLoadError(filename ? "Ungultiger PDF-Dateiname." : null);
   }, [filename]);
 
   useEffect(() => {
@@ -130,6 +135,30 @@ const PDFEditorContent = () => {
       try {
         setIsRendering(true);
         setAnnotationsLoaded(false);
+        setPdfLoadError(null);
+
+        const headResponse = await fetch(pdfUrl, {
+          method: "HEAD",
+          cache: "no-store",
+        });
+
+        if (!headResponse.ok) {
+          if (currentPdfDocRef.current) {
+            currentPdfDocRef.current.destroy().catch(() => {});
+            currentPdfDocRef.current = null;
+          }
+
+          setPdfDoc(null);
+          setNumPages(0);
+          setCurrentPage(1);
+          setAnnotationsLoaded(true);
+          setPdfLoadError(
+            headResponse.status === 404
+              ? "Die PDF-Datei wurde im Upload-Ordner nicht gefunden."
+              : "Die PDF-Datei konnte nicht geladen werden.",
+          );
+          return;
+        }
 
         const pdfjs = await ensurePdfJs();
         if (cancelled) return;
@@ -151,7 +180,11 @@ const PDFEditorContent = () => {
         setNumPages(loaded.numPages);
         setCurrentPage(1);
       } catch (error) {
-        console.error("Error loading PDF:", error);
+        setPdfDoc(null);
+        setNumPages(0);
+        setCurrentPage(1);
+        setAnnotationsLoaded(true);
+        setPdfLoadError("Die PDF-Datei konnte nicht geladen werden.");
       } finally {
         if (!cancelled) setIsRendering(false);
       }
@@ -743,6 +776,20 @@ const PDFEditorContent = () => {
             }}
           >
             ⟳ Lade PDF...
+          </div>
+        )}
+
+        {pdfLoadError && (
+          <div
+            style={{
+              padding: "6px 12px",
+              backgroundColor: "#b71d18",
+              color: "white",
+              borderRadius: "4px",
+              fontSize: "12px",
+            }}
+          >
+            {pdfLoadError}
           </div>
         )}
 

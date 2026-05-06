@@ -15,45 +15,95 @@ const mimeTypes: Record<string, string> = {
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
+async function resolveRequestedFile(
+  rawFilename: string,
+): Promise<
+  | { ok: true; filename: string; normalizedFilePath: string; fileStat: Awaited<ReturnType<typeof fs.stat>> }
+  | { ok: false; response: NextResponse }
+> {
+  const filename = (() => {
+    try {
+      return decodeURIComponent(rawFilename);
+    } catch {
+      return rawFilename;
+    }
+  })();
+
+  if (!isSafeUploadedFilename(filename)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { message: "Invalid filename." },
+        { status: 400 },
+      ),
+    };
+  }
+
+  const filePath = path.join(uploadedDir, filename);
+  const normalizedUploadedDir = path.resolve(uploadedDir);
+  const normalizedFilePath = path.resolve(filePath);
+
+  if (!normalizedFilePath.startsWith(normalizedUploadedDir)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { message: "Invalid file path." },
+        { status: 400 },
+      ),
+    };
+  }
+
+  try {
+    const fileStat = await fs.stat(normalizedFilePath);
+    return { ok: true, filename, normalizedFilePath, fileStat };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { message: "File not found." },
+        { status: 404 },
+      ),
+    };
+  }
+}
+
+export async function HEAD(
+  _req: NextRequest,
+  context: { params: Promise<{ filename: string }> },
+) {
+  const { filename: rawFilename } = await context.params;
+  const resolved = await resolveRequestedFile(rawFilename);
+
+  if (!resolved.ok) {
+    return resolved.response;
+  }
+
+  const ext = path.extname(resolved.filename).toLowerCase();
+  const contentType = mimeTypes[ext] || "application/octet-stream";
+
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(resolved.fileStat.size),
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+    },
+  });
+}
+
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ filename: string }> },
 ) {
   try {
     const { filename: rawFilename } = await context.params;
-    const filename = (() => {
-      try {
-        return decodeURIComponent(rawFilename);
-      } catch {
-        return rawFilename;
-      }
-    })();
+    const resolved = await resolveRequestedFile(rawFilename);
 
-    if (!isSafeUploadedFilename(filename)) {
-      return NextResponse.json(
-        { message: "Invalid filename." },
-        { status: 400 },
-      );
+    if (!resolved.ok) {
+      return resolved.response;
     }
 
-    const filePath = path.join(uploadedDir, filename);
-
-    const normalizedUploadedDir = path.resolve(uploadedDir);
-    const normalizedFilePath = path.resolve(filePath);
-
-    if (!normalizedFilePath.startsWith(normalizedUploadedDir)) {
-      return NextResponse.json(
-        { message: "Invalid file path." },
-        { status: 400 },
-      );
-    }
-
-    let fileStat: Awaited<ReturnType<typeof fs.stat>>;
-    try {
-      fileStat = await fs.stat(normalizedFilePath);
-    } catch {
-      return NextResponse.json({ message: "File not found." }, { status: 404 });
-    }
+    const { filename, normalizedFilePath, fileStat } = resolved;
 
     const ext = path.extname(filename).toLowerCase();
     const contentType = mimeTypes[ext] || "application/octet-stream";
