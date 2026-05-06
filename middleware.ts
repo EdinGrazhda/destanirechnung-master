@@ -10,7 +10,34 @@ if (!JWT_SECRET_KEY) {
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get("admin_auth_token");
-  const isAdminApiRequest = request.nextUrl.pathname.startsWith("/api/admin/");
+  const pathname = request.nextUrl.pathname;
+  const isAdminApiRequest = pathname.startsWith("/api/admin/");
+  const isAdminPageRequest = pathname.startsWith("/admin");
+  const isApiRequest = pathname.startsWith("/api/");
+
+  // This app does not use Next.js server actions. Reject any action-like request
+  // or page-level mutation before it reaches the App Router runtime.
+  if (request.headers.has("next-action")) {
+    return new NextResponse("Method Not Allowed", {
+      status: 405,
+      headers: {
+        Allow: "GET, HEAD, OPTIONS",
+      },
+    });
+  }
+
+  if (!isApiRequest && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    return new NextResponse("Method Not Allowed", {
+      status: 405,
+      headers: {
+        Allow: "GET, HEAD, OPTIONS",
+      },
+    });
+  }
+
+  if (!isAdminApiRequest && !isAdminPageRequest) {
+    return NextResponse.next();
+  }
 
   const unauthorizedResponse = (message: string, status: number) => {
     if (isAdminApiRequest) {
@@ -105,5 +132,5 @@ export async function middleware(request: NextRequest) {
 
 // The paths where the middleware runs.
 export const config = {
-  matcher: ["/api/admin/:path*", "/admin/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
