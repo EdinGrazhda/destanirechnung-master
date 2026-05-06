@@ -182,14 +182,15 @@ export const GET = async (req: NextRequest) => {
     if (invoiceStatus === "dashboard") {
       const page = getSafePage(searchParams.get("invoicesPage"));
       const pageSize = 20;
+      const dashboardQuery = Invoice.find({ status: "pending" })
+        .select(invoiceListProjection)
+        .sort({ createdOn: -1, _id: -1 });
 
       // Filter by "pending" server-side — the dashboard only ever displays pending
       // invoices after client-side filtering, so fetching all statuses and discarding
       // them on the client wastes a full-collection scan.  The status index makes
       // this query fast even with a large collection.
-      const foundInvoices = await Invoice.find({ status: "pending" })
-        .select(invoiceListProjection)
-        .sort({ createdOn: -1 })
+      const foundInvoices = await dashboardQuery
         .skip(pageSize * (page - 1))
         .limit(pageSize)
         .lean();

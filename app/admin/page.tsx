@@ -69,6 +69,7 @@ const page = () => {
           const uniqueNextInvoices = nextInvoices.filter(
             (invoice: any) => !seenIds.has(invoice._id),
           );
+
           return [...prev, ...uniqueNextInvoices];
         });
         setInvoicesPageState(page);
@@ -229,6 +230,14 @@ const page = () => {
       setSelectedIds(new Set(filteredInvoices.map((i) => i._id)));
     }
   };
+
+  const totalPendingInvoices = Number.parseInt(pendingInvoicesCount, 10);
+  const loadedPendingInvoices = dashboardInvoices.filter(
+    (invoice) => invoice.status === "pending",
+  ).length;
+  const canLoadMoreDashboardInvoices = Number.isNaN(totalPendingInvoices)
+    ? hasMoreDashboardInvoices
+    : loadedPendingInvoices < totalPendingInvoices;
 
   return (
     <div className="dash-layout">
@@ -464,22 +473,19 @@ const page = () => {
           <div
             className="dash-load-more"
             onClick={() => {
-              if (isLoadingMoreInvoices || !hasMoreDashboardInvoices) return;
+              if (isLoadingMoreInvoices || !canLoadMoreDashboardInvoices) return;
               loadExtraDashboardInvoices(invoicesPageState + 1);
             }}
             style={{
-              opacity: isLoadingMoreInvoices || !hasMoreDashboardInvoices ? 0.6 : 1,
+              opacity:
+                isLoadingMoreInvoices || !canLoadMoreDashboardInvoices ? 0.6 : 1,
               pointerEvents:
-                isLoadingMoreInvoices || !hasMoreDashboardInvoices ? "none" : "auto",
+                isLoadingMoreInvoices || !canLoadMoreDashboardInvoices
+                  ? "none"
+                  : "auto",
             }}
           >
-            <p>
-              {isLoadingMoreInvoices
-                ? "Wird geladen..."
-                : hasMoreDashboardInvoices
-                  ? "Alle Anzeigen"
-                  : "Keine weiteren Rechnungen"}
-            </p>
+            <p>{isLoadingMoreInvoices ? "Wird geladen..." : "Alle Anzeigen"}</p>
           </div>
         </div>
       </main>
