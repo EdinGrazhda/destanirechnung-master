@@ -4,12 +4,18 @@ import { getPdfEditorHref } from "@/utils/uploadedFilename";
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
 
+const DASHBOARD_PAGE_SIZE = 20;
+
 const page = () => {
   const [dashboardInvoices, setDashboardInvoices] = useState<Array<any>>([]);
   const [approvedInvoicesCount, setApprovedInvoicesCount] =
     useState<string>("");
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState<string>("");
-  let [invoicesPageState, setInvoicesPageState] = useState<number>(2);
+  const [invoicesPageState, setInvoicesPageState] = useState<number>(1);
+  const [isLoadingMoreInvoices, setIsLoadingMoreInvoices] =
+    useState<boolean>(false);
+  const [hasMoreDashboardInvoices, setHasMoreDashboardInvoices] =
+    useState<boolean>(true);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -30,6 +36,10 @@ const page = () => {
       const json_res = await response.json();
       if (response.ok) {
         setDashboardInvoices(json_res.foundInvoices);
+        setInvoicesPageState(1);
+        setHasMoreDashboardInvoices(
+          json_res.foundInvoices.length === DASHBOARD_PAGE_SIZE,
+        );
       } else {
         alert(json_res.message);
       }
@@ -40,20 +50,37 @@ const page = () => {
   };
 
   const loadExtraDashboardInvoices = async (page: number) => {
+    if (isLoadingMoreInvoices || !hasMoreDashboardInvoices) return;
+
     try {
+      setIsLoadingMoreInvoices(true);
       const response = await fetch(
         `/api/admin/invoice?invoiceStatus=dashboard&invoicesPage=${page}`,
         { cache: "no-store" },
       );
       const json_res = await response.json();
       if (response.ok) {
-        setDashboardInvoices((prev) => [...prev, ...json_res.foundInvoices]);
+        const nextInvoices = Array.isArray(json_res.foundInvoices)
+          ? json_res.foundInvoices
+          : [];
+
+        setDashboardInvoices((prev) => {
+          const seenIds = new Set(prev.map((invoice) => invoice._id));
+          const uniqueNextInvoices = nextInvoices.filter(
+            (invoice: any) => !seenIds.has(invoice._id),
+          );
+          return [...prev, ...uniqueNextInvoices];
+        });
+        setInvoicesPageState(page);
+        setHasMoreDashboardInvoices(nextInvoices.length === DASHBOARD_PAGE_SIZE);
       } else {
         alert(json_res.message);
       }
     } catch (err) {
       console.log(err);
       alert("Network Connectivity Issues.");
+    } finally {
+      setIsLoadingMoreInvoices(false);
     }
   };
 
@@ -437,12 +464,22 @@ const page = () => {
           <div
             className="dash-load-more"
             onClick={() => {
-              const nextPage = invoicesPageState + 1;
-              setInvoicesPageState(nextPage);
-              loadExtraDashboardInvoices(invoicesPageState);
+              if (isLoadingMoreInvoices || !hasMoreDashboardInvoices) return;
+              loadExtraDashboardInvoices(invoicesPageState + 1);
+            }}
+            style={{
+              opacity: isLoadingMoreInvoices || !hasMoreDashboardInvoices ? 0.6 : 1,
+              pointerEvents:
+                isLoadingMoreInvoices || !hasMoreDashboardInvoices ? "none" : "auto",
             }}
           >
-            <p>Alle Anzeigen</p>
+            <p>
+              {isLoadingMoreInvoices
+                ? "Wird geladen..."
+                : hasMoreDashboardInvoices
+                  ? "Alle Anzeigen"
+                  : "Keine weiteren Rechnungen"}
+            </p>
           </div>
         </div>
       </main>
