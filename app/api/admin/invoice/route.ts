@@ -12,7 +12,8 @@ const pump = promisify(pipeline);
 const acceptedExtensions = ["png", "jpg", "jpeg", "pdf", "xls", "xlsx"];
 const uploadDir = path.join(process.cwd(), "public", "uploaded");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-const invoiceListProjection = "_id fileName textId company price status createdOn";
+const invoiceListProjection =
+  "_id fileName textId company price status createdOn";
 
 // Gives the route 30 s to respond; prevents nginx 502 on slow uploads.
 export const maxDuration = 30;
@@ -176,7 +177,11 @@ export const GET = async (req: NextRequest) => {
       const page = getSafePage(searchParams.get("invoicesPage"));
       const pageSize = 20;
 
-      const foundInvoices = await Invoice.find({})
+      // Filter by "pending" server-side — the dashboard only ever displays pending
+      // invoices after client-side filtering, so fetching all statuses and discarding
+      // them on the client wastes a full-collection scan.  The status index makes
+      // this query fast even with a large collection.
+      const foundInvoices = await Invoice.find({ status: "pending" })
         .select(invoiceListProjection)
         .sort({ createdOn: -1 })
         .skip(pageSize * (page - 1))
