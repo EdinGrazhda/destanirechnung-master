@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
+import { isSafeUploadedFilename } from "@/utils/uploadedFilename";
 
 const uploadedDir = path.join(process.cwd(), "public", "uploaded");
 
@@ -14,27 +15,21 @@ const mimeTypes: Record<string, string> = {
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
-function isValidFilename(filename: string) {
-  if (!filename) return false;
-  if (filename === "let") return false;
-  if (filename === "undefined" || filename === "null") return false;
-  if (filename.includes("..")) return false;
-  if (filename.includes("/")) return false;
-  if (filename.includes("\\")) return false;
-  if (filename.trim().length === 0) return false;
-
-  const ext = path.extname(filename).toLowerCase();
-  return Object.keys(mimeTypes).includes(ext);
-}
-
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ filename: string }> },
 ) {
   try {
-    const { filename } = await context.params;
+    const { filename: rawFilename } = await context.params;
+    const filename = (() => {
+      try {
+        return decodeURIComponent(rawFilename);
+      } catch {
+        return rawFilename;
+      }
+    })();
 
-    if (!isValidFilename(filename)) {
+    if (!isSafeUploadedFilename(filename)) {
       return NextResponse.json(
         { message: "Invalid filename." },
         { status: 400 },

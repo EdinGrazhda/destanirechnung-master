@@ -10,10 +10,19 @@ if (!JWT_SECRET_KEY) {
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get("admin_auth_token");
+  const isAdminApiRequest = request.nextUrl.pathname.startsWith("/api/admin/");
+
+  const unauthorizedResponse = (message: string, status: number) => {
+    if (isAdminApiRequest) {
+      return NextResponse.json({ message }, { status });
+    }
+
+    return NextResponse.redirect(new URL("/", request.url));
+  };
 
   // Check if the auth_token cookie exists in the request
   if (!token) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return unauthorizedResponse("Unauthorized", 401);
   }
 
   // Verify JWT token. Pass to next route if valid, return response if JWT throws errors.
@@ -30,6 +39,10 @@ export async function middleware(request: NextRequest) {
         : "";
 
     if (role !== "admin") {
+      if (isAdminApiRequest) {
+        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+      }
+
       return NextResponse.redirect(new URL("/?cause=Forbidden", request.url));
     }
 
@@ -41,6 +54,13 @@ export async function middleware(request: NextRequest) {
     return response;
   } catch (err) {
     if (!isJwtError(err)) {
+      if (isAdminApiRequest) {
+        return NextResponse.json(
+          { message: "Internal Server Error" },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.redirect(
         new URL("/?cause=InternalServerError", request.url),
       );
@@ -48,6 +68,10 @@ export async function middleware(request: NextRequest) {
 
     if (err.name === "TokenExpiredError" || err.name === "JWTExpired") {
       // Token has expired.
+      if (isAdminApiRequest) {
+        return NextResponse.json({ message: "Token expired" }, { status: 401 });
+      }
+
       return NextResponse.redirect(
         new URL("/?cause=TokenExpiredError", request.url),
       );
@@ -56,11 +80,22 @@ export async function middleware(request: NextRequest) {
       err.name === "JWSError"
     ) {
       // General JWT error (e.g., malformed token)
+      if (isAdminApiRequest) {
+        return NextResponse.json({ message: "Invalid token" }, { status: 401 });
+      }
+
       return NextResponse.redirect(
         new URL("/?cause=JsonWebTokenError", request.url),
       );
     } else {
       // Other un-handled JWT error
+      if (isAdminApiRequest) {
+        return NextResponse.json(
+          { message: "Internal Server Error" },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.redirect(
         new URL("/?cause=InternalServerError", request.url),
       );

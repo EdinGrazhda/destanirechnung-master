@@ -1,6 +1,7 @@
 import { readdir, unlink, writeFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
+import { isSafePdfFilename } from "@/utils/uploadedFilename";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +23,15 @@ export async function POST(request: NextRequest) {
         return originalFilename;
       }
     })();
-    const safeFilename = path.basename(decodedFilename);
+
+    if (!isSafePdfFilename(decodedFilename)) {
+      return NextResponse.json(
+        { message: "Ungultiger Dateiname" },
+        { status: 400 },
+      );
+    }
+
+    const safeFilename = decodedFilename;
     const safeBase = safeFilename.replace(/\.pdf$/i, "");
     const clearAll = formData.get("clearAll") === "1";
 

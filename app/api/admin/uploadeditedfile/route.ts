@@ -6,6 +6,7 @@ import { pipeline } from "stream";
 import { promisify } from "util";
 import { connectDB } from "@/utils/dbConnect";
 import Invoice from "@/models/Invoice";
+import { isSafeUploadedFilename } from "@/utils/uploadedFilename";
 
 const pump = promisify(pipeline);
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploaded");
@@ -24,8 +25,12 @@ export const POST = async (req: any, res: NextResponse) => {
     }
     // Sanitize: strip any directory components from the filename
     const uploadedFileName = path.basename(file.name);
-    const fileExtension = uploadedFileName.split(".").pop()?.toLowerCase() ?? "";
-    if (!acceptedExtensions.includes(fileExtension)) {
+    const fileExtension =
+      uploadedFileName.split(".").pop()?.toLowerCase() ?? "";
+    if (
+      !isSafeUploadedFilename(uploadedFileName) ||
+      !acceptedExtensions.includes(fileExtension)
+    ) {
       return NextResponse.json(
         {
           message:

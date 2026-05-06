@@ -6,6 +6,10 @@ import { promisify } from "util";
 import { connectDB } from "@/utils/dbConnect";
 import { v4 as uuidv4 } from "uuid";
 import Invoice from "@/models/Invoice";
+import {
+  isSafePdfFilename,
+  isSafeUploadedFilename,
+} from "@/utils/uploadedFilename";
 
 const pump = promisify(pipeline);
 
@@ -167,8 +171,10 @@ export const GET = async (req: NextRequest) => {
           { status: 404 },
         );
       }
+      const fileName = (invoice as any).fileName;
+
       return NextResponse.json(
-        { fileName: (invoice as any).fileName ?? null },
+        { fileName: isSafePdfFilename(fileName) ? fileName : null },
         { status: 200 },
       );
     }
@@ -349,7 +355,7 @@ export const DELETE = async (req: NextRequest) => {
       );
     }
 
-    if (deletedInvoice.fileName) {
+    if (isSafeUploadedFilename(deletedInvoice.fileName)) {
       const filePath = path.join(uploadDir, deletedInvoice.fileName);
 
       try {

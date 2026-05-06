@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
+import { isSafePdfFilename } from "@/utils/uploadedFilename";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploaded");
 
@@ -27,15 +28,14 @@ export async function GET(request: NextRequest) {
       }
     })();
 
-    if (decodedFilename === "undefined" || decodedFilename === "null") {
+    if (!isSafePdfFilename(decodedFilename)) {
       return NextResponse.json(
         { message: "Invalid filename" },
         { status: 400 },
       );
     }
 
-    // Strip any directory traversal components
-    const safeFilename = path.basename(decodedFilename);
+    const safeFilename = decodedFilename;
     const safeBase = safeFilename.replace(/\.pdf$/i, "");
     const requestedPageCount = Number(pageCountParam);
     const hasValidPageCount =

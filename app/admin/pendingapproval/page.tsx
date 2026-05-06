@@ -1,5 +1,6 @@
 "use client";
 import { AdminOwnerPageNavColumn } from "@/components";
+import { getPdfEditorHref } from "@/utils/uploadedFilename";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
@@ -280,7 +281,7 @@ const page = () => {
                         <i className="fa-regular fa-file-lines dash-kunde__icon"></i>
                         <div>
                           <Link
-                            href={`/admin/pdf-editor?id=${inv._id}${inv.fileName ? `&file=${encodeURIComponent(inv.fileName)}` : ""}`}
+                            href={getPdfEditorHref(inv._id, inv.fileName)}
                             target="_blank"
                             className="dash-kunde__name"
                           >
@@ -345,7 +346,7 @@ const page = () => {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Link
-                    href={`/admin/pdf-editor?id=${inv._id}${inv.fileName ? `&file=${encodeURIComponent(inv.fileName)}` : ""}`}
+                    href={getPdfEditorHref(inv._id, inv.fileName)}
                     target="_blank"
                     className="dash-menu__item"
                   >

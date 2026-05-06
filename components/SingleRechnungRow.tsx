@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import React from "react";
+import { getPdfEditorHref } from "@/utils/uploadedFilename";
 
 interface Props {
   invoiceId: string;
@@ -110,7 +111,7 @@ const SingleRechnungRow = ({
             cursor: "pointer",
             textDecoration: "underline",
           }}
-          href={`/admin/pdf-editor?id=${invoiceId}${invoiceFile ? `&file=${encodeURIComponent(invoiceFile)}` : ""}`}
+          href={getPdfEditorHref(invoiceId, invoiceFile)}
           target="_blank"
         >
           <p className="small" style={{ color: "black" }}>

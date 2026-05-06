@@ -2,6 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { isSafePdfFilename } from "@/utils/uploadedFilename";
 
 type PDFDocumentProxyLike = {
   numPages: number;
@@ -13,17 +14,6 @@ type PDFLoadingTaskLike = {
   promise: Promise<PDFDocumentProxyLike>;
   destroy: () => void;
 };
-
-function isSafePdfFilename(value: string | null) {
-  if (!value) return false;
-  if (value === "undefined" || value === "null" || value === "let") {
-    return false;
-  }
-  if (value.includes("..") || value.includes("/") || value.includes("\\")) {
-    return false;
-  }
-  return /\.pdf$/i.test(value);
-}
 
 const PDFEditorContent = () => {
   const searchParams = useSearchParams();
