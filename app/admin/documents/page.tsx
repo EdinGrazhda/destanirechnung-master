@@ -4,11 +4,19 @@ import { getPdfEditorHref } from "@/utils/uploadedFilename";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
+const DOCUMENTS_PAGE_SIZE = 20;
+
 const page = () => {
   const [documentsInvoices, setDocumentsInvoices] = useState<Array<any>>([]);
+  const [allInvoicesCount, setAllInvoicesCount] = useState<string>("");
   const [paidInvoicesCount, setPaidInvoicesCount] = useState<string>("");
   const [approvedInvoicesCount, setApprovedInvoicesCount] =
     useState<string>("");
+  const [invoicesPageState, setInvoicesPageState] = useState<number>(1);
+  const [isLoadingMoreInvoices, setIsLoadingMoreInvoices] =
+    useState<boolean>(false);
+  const [hasMoreDocumentsInvoices, setHasMoreDocumentsInvoices] =
+    useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState("all");
@@ -20,16 +28,55 @@ const page = () => {
 
   const loadDocumentsInvoices = async () => {
     try {
-      const response = await fetch(`/api/admin/invoice?invoiceStatus=all`);
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=all&page=1&limit=${DOCUMENTS_PAGE_SIZE}`,
+        { cache: "no-store" },
+      );
       const json_res = await response.json();
       if (response.ok) {
-        setDocumentsInvoices(json_res.foundInvoices.reverse());
+        setDocumentsInvoices(json_res.foundInvoices);
+        setInvoicesPageState(1);
+        setHasMoreDocumentsInvoices(
+          json_res.foundInvoices.length === DOCUMENTS_PAGE_SIZE,
+        );
       } else {
         alert(json_res.message);
       }
     } catch (err) {
       console.log(err);
       alert("Network Connectivity Issues.");
+    }
+  };
+
+  const loadExtraDocumentsInvoices = async (page: number) => {
+    try {
+      setIsLoadingMoreInvoices(true);
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=all&page=${page}&limit=${DOCUMENTS_PAGE_SIZE}`,
+        { cache: "no-store" },
+      );
+      const json_res = await response.json();
+      if (response.ok) {
+        const nextInvoices = Array.isArray(json_res.foundInvoices)
+          ? json_res.foundInvoices
+          : [];
+        setDocumentsInvoices((prev) => {
+          const seenIds = new Set(prev.map((inv) => inv._id));
+          return [
+            ...prev,
+            ...nextInvoices.filter((inv: any) => !seenIds.has(inv._id)),
+          ];
+        });
+        setInvoicesPageState(page);
+        setHasMoreDocumentsInvoices(nextInvoices.length === DOCUMENTS_PAGE_SIZE);
+      } else {
+        alert(json_res.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    } finally {
+      setIsLoadingMoreInvoices(false);
     }
   };
 
@@ -40,6 +87,7 @@ const page = () => {
       if (response.ok) {
         setPaidInvoicesCount(json_res.paidInvoicesCount);
         setApprovedInvoicesCount(json_res.approvedInvoicesCount);
+        setAllInvoicesCount(String(json_res.allInvoicesCount));
       } else {
         alert(json_res.message);
       }
@@ -90,6 +138,11 @@ const page = () => {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
+
+  const totalAllInvoices = Number.parseInt(allInvoicesCount, 10);
+  const canLoadMoreDocumentsInvoices = Number.isNaN(totalAllInvoices)
+    ? hasMoreDocumentsInvoices
+    : documentsInvoices.length < totalAllInvoices;
 
   const filteredInvoices = documentsInvoices
     .filter((inv) => {
@@ -199,7 +252,7 @@ const page = () => {
           <h2 className="dash-section__title">
             Dokumente
             <span className="dash-section__badge">
-              {documentsInvoices.length}
+              {allInvoicesCount || documentsInvoices.length}
             </span>
           </h2>
           <p className="dash-section__subtitle">Dokumentenübersicht</p>
@@ -356,6 +409,27 @@ const page = () => {
                 </div>
               );
             })()}
+
+          <div
+            className="dash-load-more"
+            onClick={() => {
+              if (isLoadingMoreInvoices || !canLoadMoreDocumentsInvoices)
+                return;
+              loadExtraDocumentsInvoices(invoicesPageState + 1);
+            }}
+            style={{
+              opacity:
+                isLoadingMoreInvoices || !canLoadMoreDocumentsInvoices
+                  ? 0.6
+                  : 1,
+              pointerEvents:
+                isLoadingMoreInvoices || !canLoadMoreDocumentsInvoices
+                  ? "none"
+                  : "auto",
+            }}
+          >
+            <p>{isLoadingMoreInvoices ? "Wird geladen..." : "Alle Anzeigen"}</p>
+          </div>
         </div>
       </main>
     </div>

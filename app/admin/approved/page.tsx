@@ -4,11 +4,18 @@ import { getPdfEditorHref } from "@/utils/uploadedFilename";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
+const APPROVED_PAGE_SIZE = 20;
+
 const page = () => {
   const [approvedInvoices, setApprovedInvoices] = useState<Array<any>>([]);
   const [approvedInvoicesCount, setApprovedInvoicesCount] =
     useState<string>("");
   const [pendingInvoicesCount, setPendingInvoicesCount] = useState<string>("");
+  const [invoicesPageState, setInvoicesPageState] = useState<number>(1);
+  const [isLoadingMoreInvoices, setIsLoadingMoreInvoices] =
+    useState<boolean>(false);
+  const [hasMoreApprovedInvoices, setHasMoreApprovedInvoices] =
+    useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState("all");
@@ -20,16 +27,55 @@ const page = () => {
 
   const loadApprovedInvoices = async () => {
     try {
-      const response = await fetch(`/api/admin/invoice?invoiceStatus=approved`);
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=approved&page=1&limit=${APPROVED_PAGE_SIZE}`,
+        { cache: "no-store" },
+      );
       const json_res = await response.json();
       if (response.ok) {
         setApprovedInvoices(json_res.foundInvoices);
+        setInvoicesPageState(1);
+        setHasMoreApprovedInvoices(
+          json_res.foundInvoices.length === APPROVED_PAGE_SIZE,
+        );
       } else {
         alert(json_res.message);
       }
     } catch (err) {
       console.log(err);
       alert("Network Connectivity Issues.");
+    }
+  };
+
+  const loadExtraApprovedInvoices = async (page: number) => {
+    try {
+      setIsLoadingMoreInvoices(true);
+      const response = await fetch(
+        `/api/admin/invoice?invoiceStatus=approved&page=${page}&limit=${APPROVED_PAGE_SIZE}`,
+        { cache: "no-store" },
+      );
+      const json_res = await response.json();
+      if (response.ok) {
+        const nextInvoices = Array.isArray(json_res.foundInvoices)
+          ? json_res.foundInvoices
+          : [];
+        setApprovedInvoices((prev) => {
+          const seenIds = new Set(prev.map((inv) => inv._id));
+          return [
+            ...prev,
+            ...nextInvoices.filter((inv: any) => !seenIds.has(inv._id)),
+          ];
+        });
+        setInvoicesPageState(page);
+        setHasMoreApprovedInvoices(nextInvoices.length === APPROVED_PAGE_SIZE);
+      } else {
+        alert(json_res.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    } finally {
+      setIsLoadingMoreInvoices(false);
     }
   };
 
@@ -134,6 +180,11 @@ const page = () => {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
+
+  const totalApprovedInvoices = Number.parseInt(approvedInvoicesCount, 10);
+  const canLoadMoreApprovedInvoices = Number.isNaN(totalApprovedInvoices)
+    ? hasMoreApprovedInvoices
+    : approvedInvoices.length < totalApprovedInvoices;
 
   const filteredInvoices = approvedInvoices.filter((inv) => {
     if (searchQuery) {
@@ -397,6 +448,27 @@ const page = () => {
                 </div>
               );
             })()}
+
+          <div
+            className="dash-load-more"
+            onClick={() => {
+              if (isLoadingMoreInvoices || !canLoadMoreApprovedInvoices)
+                return;
+              loadExtraApprovedInvoices(invoicesPageState + 1);
+            }}
+            style={{
+              opacity:
+                isLoadingMoreInvoices || !canLoadMoreApprovedInvoices
+                  ? 0.6
+                  : 1,
+              pointerEvents:
+                isLoadingMoreInvoices || !canLoadMoreApprovedInvoices
+                  ? "none"
+                  : "auto",
+            }}
+          >
+            <p>{isLoadingMoreInvoices ? "Wird geladen..." : "Alle Anzeigen"}</p>
+          </div>
         </div>
       </main>
     </div>
