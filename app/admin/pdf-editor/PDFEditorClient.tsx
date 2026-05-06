@@ -2,16 +2,28 @@
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  GlobalWorkerOptions,
-  getDocument,
-  type PDFDocumentProxy,
-} from "pdfjs-dist";
-import { PDFDocument } from "pdf-lib";
 
-// Serve the worker locally — avoids CDN round-trip and external dependency.
-// The file is copied from node_modules to public/ by the postinstall script.
-GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+type PDFDocumentProxyLike = {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<any>;
+  destroy: () => Promise<void>;
+};
+
+type PDFLoadingTaskLike = {
+  promise: Promise<PDFDocumentProxyLike>;
+  destroy: () => void;
+};
+
+function isSafePdfFilename(value: string | null) {
+  if (!value) return false;
+  if (value === "undefined" || value === "null" || value === "let") {
+    return false;
+  }
+  if (value.includes("..") || value.includes("/") || value.includes("\\")) {
+    return false;
+  }
+  return /\.pdf$/i.test(value);
+}
 
 const PDFEditorContent = () => {
   const searchParams = useSearchParams();
@@ -19,7 +31,7 @@ const PDFEditorContent = () => {
   const invoiceId = searchParams.get("id");
 
   const [filename, setFilename] = useState<string | null>(
-    rawFile && rawFile !== "undefined" && rawFile !== "null" ? rawFile : null,
+    isSafePdfFilename(rawFile) ? rawFile : null,
   );
   const [pdfUrl, setPdfUrl] = useState("");
   const [mergedPdfUrl, setMergedPdfUrl] = useState("");
@@ -27,7 +39,7 @@ const PDFEditorContent = () => {
   const [lineWidth, setLineWidth] = useState(3);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [drawMode, setDrawMode] = useState(false);
-  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxyLike | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState(1.2);
@@ -55,12 +67,36 @@ const PDFEditorContent = () => {
   const dirtyPagesRef = useRef<Set<number>>(new Set());
   const stopDrawingRefCb = useRef<() => void>(() => {});
   const scrollRafRef = useRef<number | null>(null);
-  const currentPdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const currentPdfDocRef = useRef<PDFDocumentProxyLike | null>(null);
+  const pdfJsRef = useRef<null | {
+    getDocument: (src: string) => PDFLoadingTaskLike;
+  }>(null);
+  const pdfLibRef = useRef<null | typeof import("pdf-lib")>(null);
 
   const pageNumbers = useMemo(
     () => Array.from({ length: numPages }, (_, i) => i + 1),
     [numPages],
   );
+
+  const ensurePdfJs = async () => {
+    if (pdfJsRef.current) return pdfJsRef.current;
+
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    pdfJsRef.current = {
+      getDocument: (src: string) =>
+        pdfjs.getDocument(src) as PDFLoadingTaskLike,
+    };
+
+    return pdfJsRef.current;
+  };
+
+  const ensurePdfLib = async () => {
+    if (pdfLibRef.current) return pdfLibRef.current;
+
+    pdfLibRef.current = await import("pdf-lib");
+    return pdfLibRef.current;
+  };
 
   // If filename is missing, resolve it from the DB using the invoice ID.
   useEffect(() => {
@@ -68,17 +104,21 @@ const PDFEditorContent = () => {
     fetch(`/api/admin/invoice?invoiceId=${encodeURIComponent(invoiceId)}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.fileName) setFilename(data.fileName);
+        if (isSafePdfFilename(data.fileName)) setFilename(data.fileName);
       })
       .catch(() => {});
   }, [filename, invoiceId]);
 
   useEffect(() => {
-    if (filename) {
-      const safeName = encodeURIComponent(filename);
+    if (isSafePdfFilename(filename)) {
+      const safeName = encodeURIComponent(filename as string);
       setPdfUrl(`/api/getuploadedfiles/${safeName}?raw=1`);
       setMergedPdfUrl(`/api/getuploadedfiles/${safeName}`);
+      return;
     }
+
+    setPdfUrl("");
+    setMergedPdfUrl("");
   }, [filename]);
 
   useEffect(() => {
@@ -92,7 +132,7 @@ const PDFEditorContent = () => {
 
   useEffect(() => {
     let cancelled = false;
-    let loadingTask: ReturnType<typeof getDocument> | null = null;
+    let loadingTask: PDFLoadingTaskLike | null = null;
 
     const loadPdf = async () => {
       if (!pdfUrl) return;
@@ -101,7 +141,10 @@ const PDFEditorContent = () => {
         setIsRendering(true);
         setAnnotationsLoaded(false);
 
-        loadingTask = getDocument(pdfUrl);
+        const pdfjs = await ensurePdfJs();
+        if (cancelled) return;
+
+        loadingTask = pdfjs.getDocument(pdfUrl);
         const loaded = await loadingTask.promise;
 
         if (cancelled) {
@@ -594,6 +637,7 @@ const PDFEditorContent = () => {
       if (!pdfRes.ok) throw new Error("PDF fetch failed");
 
       const originalPdfBytes = await pdfRes.arrayBuffer();
+      const { PDFDocument } = await ensurePdfLib();
       const mergedPdf = await PDFDocument.load(originalPdfBytes);
       const mergedPdfPages = mergedPdf.getPages();
       const pageCount = Math.min(numPages, mergedPdfPages.length);
