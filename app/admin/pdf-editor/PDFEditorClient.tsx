@@ -81,7 +81,7 @@ const PDFEditorContent = () => {
   const ensurePdfJs = async () => {
     if (pdfJsRef.current) return pdfJsRef.current;
 
-    const pdfjs = await import("pdfjs-dist");
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
     pdfJsRef.current = {
       getDocument: (src: string) =>

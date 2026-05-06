@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "node -e \"try{const p=require.resolve('pdfjs-dist/build/pdf.worker.min.mjs');require('fs').copyFileSync(p,'public/pdf.worker.min.mjs');console.log('pdfjs worker copied')}catch(e){console.warn('pdfjs worker copy failed:',e.message)}\"",
+    "postinstall": "node -e \"try{const p=require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');require('fs').copyFileSync(p,'public/pdf.worker.min.mjs');console.log('pdfjs worker copied')}catch(e){console.warn('pdfjs worker copy failed:',e.message)}\"",
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
