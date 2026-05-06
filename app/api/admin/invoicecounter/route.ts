@@ -6,17 +6,23 @@ export const GET = async () => {
   try {
     await connectDB();
 
-    const [
-      allInvoicesCount,
-      approvedInvoicesCount,
-      pendingInvoicesCount,
-      paidInvoicesCount,
-    ] = await Promise.all([
-      Invoice.countDocuments({}),
-      Invoice.countDocuments({ status: "approved" }),
-      Invoice.countDocuments({ status: "pending" }),
-      Invoice.countDocuments({ status: "paid" }),
+    const groupedCounts = await Invoice.aggregate([
+      { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
+
+    let allInvoicesCount = 0;
+    let approvedInvoicesCount = 0;
+    let pendingInvoicesCount = 0;
+    let paidInvoicesCount = 0;
+
+    for (const row of groupedCounts as Array<{ _id: string; count: number }>) {
+      const count = Number(row.count) || 0;
+      allInvoicesCount += count;
+
+      if (row._id === "approved") approvedInvoicesCount = count;
+      if (row._id === "pending") pendingInvoicesCount = count;
+      if (row._id === "paid") paidInvoicesCount = count;
+    }
 
     return NextResponse.json(
       {

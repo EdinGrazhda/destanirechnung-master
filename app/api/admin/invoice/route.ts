@@ -12,6 +12,7 @@ const pump = promisify(pipeline);
 const acceptedExtensions = ["png", "jpg", "jpeg", "pdf", "xls", "xlsx"];
 const uploadDir = path.join(process.cwd(), "public", "uploaded");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+const invoiceListProjection = "_id fileName textId company price status createdOn";
 
 // Gives the route 30 s to respond; prevents nginx 502 on slow uploads.
 export const maxDuration = 30;
@@ -176,6 +177,7 @@ export const GET = async (req: NextRequest) => {
       const pageSize = 20;
 
       const foundInvoices = await Invoice.find({})
+        .select(invoiceListProjection)
         .sort({ createdOn: -1 })
         .skip(pageSize * (page - 1))
         .limit(pageSize)
@@ -237,6 +239,7 @@ export const GET = async (req: NextRequest) => {
         ...statusFilter,
         ...dateFilter,
       })
+        .select(invoiceListProjection)
         .sort({ createdOn: -1 })
         .skip(limit * (page - 1))
         .limit(limit)
@@ -256,6 +259,7 @@ export const GET = async (req: NextRequest) => {
     const foundInvoices = await Invoice.find(
       invoiceStatus === "all" ? {} : { status: invoiceStatus },
     )
+      .select(invoiceListProjection)
       .sort({ createdOn: -1 })
       .limit(100)
       .lean();

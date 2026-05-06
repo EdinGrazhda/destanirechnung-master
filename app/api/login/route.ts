@@ -52,7 +52,15 @@ export const POST = async (req: NextRequest) => {
     await connectDB();
 
     // Get user with the matching username address from the database
-    const foundUser = await User.findOne({ username: username });
+    const foundUser = (await User.findOne({ username: username })
+      .select("_id username email role password")
+      .lean()) as {
+      _id: unknown;
+      username: string;
+      email: string;
+      role: string;
+      password: string;
+    } | null;
 
     // Check if the user exists
     if (!foundUser) {

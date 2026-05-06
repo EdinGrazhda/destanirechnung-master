@@ -1,4 +1,4 @@
-import { readFile, access, constants } from "fs/promises";
+import { readFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
@@ -27,6 +27,13 @@ export async function GET(request: NextRequest) {
       }
     })();
 
+    if (decodedFilename === "undefined" || decodedFilename === "null") {
+      return NextResponse.json(
+        { message: "Invalid filename" },
+        { status: 400 },
+      );
+    }
+
     // Strip any directory traversal components
     const safeFilename = path.basename(decodedFilename);
     const safeBase = safeFilename.replace(/\.pdf$/i, "");
@@ -37,45 +44,48 @@ export async function GET(request: NextRequest) {
     const pages: Record<string, string> = {};
 
     if (hasValidPageCount) {
-      for (let i = 1; i <= requestedPageCount; i += 1) {
-        const annotationPath = path.join(
-          UPLOAD_DIR,
-          `annotation_${safeBase}_p${i}.png`,
-        );
-        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) continue;
+      const readTasks = Array.from({ length: requestedPageCount }, (_, idx) => {
+        const i = idx + 1;
+        return (async () => {
+          const annotationPath = path.join(
+            UPLOAD_DIR,
+            `annotation_${safeBase}_p${i}.png`,
+          );
+          if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) return;
 
-        try {
-          await access(annotationPath, constants.R_OK);
-          const annotationBuffer = await readFile(annotationPath);
-          pages[String(i)] =
-            `data:image/png;base64,${annotationBuffer.toString("base64")}`;
-        } catch {
-          // Ignore missing page annotations
-        }
-      }
+          try {
+            const annotationBuffer = await readFile(annotationPath);
+            pages[String(i)] =
+              `data:image/png;base64,${annotationBuffer.toString("base64")}`;
+          } catch {
+            // Ignore missing page annotations
+          }
+        })();
+      });
+
+      await Promise.all(readTasks);
     } else {
       const files = await fs.readdir(UPLOAD_DIR);
 
-      for (const file of files) {
-        const match = file.match(
-          new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i"),
-        );
-        if (!match) continue;
+      const filePattern = new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i");
+      const readTasks = files.map(async (file) => {
+        const match = file.match(filePattern);
+        if (!match) return;
 
         const page = match[1];
         const annotationPath = path.join(UPLOAD_DIR, file);
-
-        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) continue;
+        if (!annotationPath.startsWith(UPLOAD_DIR + path.sep)) return;
 
         try {
-          await access(annotationPath, constants.R_OK);
           const annotationBuffer = await readFile(annotationPath);
           pages[page] =
             `data:image/png;base64,${annotationBuffer.toString("base64")}`;
         } catch {
           // Ignore unreadable files and continue
         }
-      }
+      });
+
+      await Promise.all(readTasks);
     }
 
     // Backward compatibility for older single-file annotation format.
@@ -84,7 +94,6 @@ export async function GET(request: NextRequest) {
       const legacyPath = path.join(UPLOAD_DIR, legacyName);
       if (legacyPath.startsWith(UPLOAD_DIR + path.sep)) {
         try {
-          await access(legacyPath, constants.R_OK);
           const annotationBuffer = await readFile(legacyPath);
           pages["1"] =
             `data:image/png;base64,${annotationBuffer.toString("base64")}`;
@@ -102,10 +111,11 @@ export async function GET(request: NextRequest) {
       {
         status: 200,
         headers: {
-          // Annotation PNGs rarely change mid-session.
-          // 60 s fresh + 60 s stale-while-revalidate eliminates repeated
-          // multi-MB base64 downloads on every editor open.
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=60",
+          // Must always return the freshest saved annotations.
+          // Any browser/proxy caching here causes "save succeeded but reopen shows old marks".
+          "Cache-Control": "private, no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
       },
     );

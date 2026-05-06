@@ -280,7 +280,7 @@ const page = () => {
                         <i className="fa-regular fa-file-lines dash-kunde__icon"></i>
                         <div>
                           <Link
-                            href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                            href={`/admin/pdf-editor?id=${inv._id}${inv.fileName ? `&file=${encodeURIComponent(inv.fileName)}` : ""}`}
                             target="_blank"
                             className="dash-kunde__name"
                           >
@@ -345,7 +345,7 @@ const page = () => {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Link
-                    href={`/admin/pdf-editor?file=${inv.fileName}&id=${inv._id}`}
+                    href={`/admin/pdf-editor?id=${inv._id}${inv.fileName ? `&file=${encodeURIComponent(inv.fileName)}` : ""}`}
                     target="_blank"
                     className="dash-menu__item"
                   >

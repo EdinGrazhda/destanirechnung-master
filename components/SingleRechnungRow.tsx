@@ -110,7 +110,7 @@ const SingleRechnungRow = ({
             cursor: "pointer",
             textDecoration: "underline",
           }}
-          href={`/admin/pdf-editor?file=${invoiceFile}&id=${invoiceId}`}
+          href={`/admin/pdf-editor?id=${invoiceId}${invoiceFile ? `&file=${encodeURIComponent(invoiceFile)}` : ""}`}
           target="_blank"
         >
           <p className="small" style={{ color: "black" }}>

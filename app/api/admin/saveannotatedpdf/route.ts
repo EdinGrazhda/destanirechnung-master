@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     let savedCount = 0;
+    const writeTasks: Promise<void>[] = [];
 
     for (const [key, value] of formData.entries()) {
       if (!key.startsWith("annotationPage_")) continue;
@@ -49,11 +50,18 @@ export async function POST(request: NextRequest) {
       const page = key.replace("annotationPage_", "").trim();
       if (!/^\d+$/.test(page)) continue;
 
-      const buffer = Buffer.from(await value.arrayBuffer());
       const annotationFilename = `annotation_${safeBase}_p${page}.png`;
       const annotationPath = path.join(uploadDir, annotationFilename);
-      await writeFile(annotationPath, buffer);
-      savedCount += 1;
+      writeTasks.push(
+        value.arrayBuffer().then((arr) =>
+          writeFile(annotationPath, Buffer.from(arr)),
+        ),
+      );
+    }
+
+    if (writeTasks.length > 0) {
+      await Promise.all(writeTasks);
+      savedCount = writeTasks.length;
     }
 
     // Backward compatibility: if client still sends single annotationImage,

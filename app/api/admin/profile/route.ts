@@ -18,9 +18,9 @@ export const GET = async (req: NextRequest) => {
     );
 
     await connectDB();
-    const user = await User.findOne({ username: payload.username }).select(
-      "-password",
-    );
+    const user = await User.findOne({ username: payload.username })
+      .select("username email role")
+      .lean();
 
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 });

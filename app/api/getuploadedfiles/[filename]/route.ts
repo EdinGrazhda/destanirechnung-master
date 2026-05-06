@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
-import { connectDB } from "@/utils/dbConnect";
-import Invoice from "@/models/Invoice";
 
 const uploadedDir = path.join(process.cwd(), "public", "uploaded");
 
@@ -59,17 +57,6 @@ export async function GET(
     try {
       fileStat = await fs.stat(normalizedFilePath);
     } catch {
-      // File is missing from disk but the Invoice record may still reference it.
-      // Clear the stale fileName so the UI stops requesting a file that doesn't exist.
-      try {
-        await connectDB();
-        await Invoice.updateOne(
-          { fileName: filename },
-          { $unset: { fileName: "" } },
-        );
-      } catch {
-        // Non-fatal — the 404 is still the correct response.
-      }
       return NextResponse.json({ message: "File not found." }, { status: 404 });
     }
 

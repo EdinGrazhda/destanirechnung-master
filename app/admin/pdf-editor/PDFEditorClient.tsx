@@ -7,6 +7,7 @@ import {
   getDocument,
   type PDFDocumentProxy,
 } from "pdfjs-dist";
+import { PDFDocument } from "pdf-lib";
 
 // Serve the worker locally — avoids CDN round-trip and external dependency.
 // The file is copied from node_modules to public/ by the postinstall script.
@@ -140,6 +141,17 @@ const PDFEditorContent = () => {
       setIsRendering(true);
       dirtyPagesRef.current.clear();
 
+      // Kick off the annotation fetch immediately — in parallel with page rendering
+      // so the data is ready (or nearly ready) by the time pages finish rendering.
+      const annotationFetchPromise = filename
+        ? fetch(
+            `/api/admin/getannotations?filename=${encodeURIComponent(filename)}&pages=${numPages}&t=${Date.now()}`,
+            { cache: "no-store" },
+          )
+            .then((r) => r.json())
+            .catch(() => null)
+        : Promise.resolve(null);
+
       for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
         if (cancelled) return;
 
@@ -216,13 +228,8 @@ const PDFEditorContent = () => {
       }
 
       try {
-        const response = await fetch(
-          `/api/admin/getannotations?filename=${encodeURIComponent(
-            filename,
-          )}&pages=${numPages}`,
-        );
-
-        const data = await response.json();
+        // Await the fetch that started before page rendering — usually already done.
+        const data = await annotationFetchPromise;
 
         if (data?.pages) {
           for (const [pageKey, dataUrl] of Object.entries(data.pages)) {
@@ -238,8 +245,13 @@ const PDFEditorContent = () => {
                 const actx = annotationCanvas.getContext("2d");
 
                 if (actx) {
-                  const rect = annotationCanvas.getBoundingClientRect();
-                  actx.drawImage(image, 0, 0, rect.width, rect.height);
+                  // Use physical canvas dimensions with identity transform instead of
+                  // getBoundingClientRect() which can return 0 if layout hasn't run yet,
+                  // causing annotations to be drawn as nothing (invisible on reopen).
+                  actx.save();
+                  actx.setTransform(1, 0, 0, 1, 0, 0);
+                  actx.drawImage(image, 0, 0);
+                  actx.restore();
                 }
 
                 dirtyPagesRef.current.add(pageNum);
@@ -554,17 +566,80 @@ const PDFEditorContent = () => {
     return true;
   };
 
-  const downloadMergedPDF = () => {
+  const canvasHasInk = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    const { width, height } = canvas;
+    if (width === 0 || height === 0) return false;
+
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] !== 0) return true;
+    }
+
+    return false;
+  };
+
+  const downloadMergedPDF = async () => {
     if (!isValidPdfUrl(mergedPdfUrl) || !filename) {
       console.error("Invalid mergedPdfUrl for download:", mergedPdfUrl);
       alert("PDF URL is invalid.");
       return;
     }
 
-    const anchor = document.createElement("a");
-    anchor.href = `${mergedPdfUrl}?t=${Date.now()}`;
-    anchor.download = filename;
-    anchor.click();
+    try {
+      const pdfRes = await fetch(`${mergedPdfUrl}?t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (!pdfRes.ok) throw new Error("PDF fetch failed");
+
+      const originalPdfBytes = await pdfRes.arrayBuffer();
+      const mergedPdf = await PDFDocument.load(originalPdfBytes);
+      const mergedPdfPages = mergedPdf.getPages();
+      const pageCount = Math.min(numPages, mergedPdfPages.length);
+
+      for (let pageNum = 1; pageNum <= pageCount; pageNum += 1) {
+        const annotationCanvas = annotationCanvasRefs.current[pageNum];
+        if (!annotationCanvas || !canvasHasInk(annotationCanvas)) continue;
+
+        const annotationBlob = await new Promise<Blob | null>((resolve) =>
+          annotationCanvas.toBlob((blob) => resolve(blob), "image/png"),
+        );
+        if (!annotationBlob) continue;
+
+        const annotationPngBytes = await annotationBlob.arrayBuffer();
+        const annotationImage = await mergedPdf.embedPng(annotationPngBytes);
+        const page = mergedPdfPages[pageNum - 1];
+        const { width, height } = page.getSize();
+
+        page.drawImage(annotationImage, {
+          x: 0,
+          y: 0,
+          width,
+          height,
+        });
+      }
+
+      const mergedPdfBytes = await mergedPdf.save();
+      // Convert to a plain ArrayBuffer to satisfy strict BlobPart typings.
+      const mergedPdfArrayBuffer = new ArrayBuffer(mergedPdfBytes.byteLength);
+      new Uint8Array(mergedPdfArrayBuffer).set(mergedPdfBytes);
+      const url = URL.createObjectURL(
+        new Blob([mergedPdfArrayBuffer], { type: "application/pdf" }),
+      );
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error("Download with annotations failed:", err);
+      // Fallback: download the plain PDF.
+      const a = document.createElement("a");
+      a.href = `${mergedPdfUrl}?t=${Date.now()}`;
+      a.download = filename;
+      a.click();
+    }
   };
 
   const printMergedPDF = () => {
