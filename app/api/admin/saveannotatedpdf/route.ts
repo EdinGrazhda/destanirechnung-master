@@ -53,9 +53,9 @@ export async function POST(request: NextRequest) {
       const annotationFilename = `annotation_${safeBase}_p${page}.png`;
       const annotationPath = path.join(uploadDir, annotationFilename);
       writeTasks.push(
-        value.arrayBuffer().then((arr) =>
-          writeFile(annotationPath, Buffer.from(arr)),
-        ),
+        value
+          .arrayBuffer()
+          .then((arr) => writeFile(annotationPath, Buffer.from(arr))),
       );
     }
 

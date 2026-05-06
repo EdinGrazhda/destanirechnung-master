@@ -58,9 +58,9 @@ const page = () => {
 
   const loadDashboardInvoicesCounts = async () => {
     try {
-      const response = await fetch("/api/admin/invoicecounter", {
-        cache: "no-store",
-      });
+      // No cache: "no-store" — let the browser honour the server's max-age=60
+      // header so MongoDB is not hit on every single re-render.
+      const response = await fetch("/api/admin/invoicecounter");
       const json_res = await response.json();
       if (response.ok) {
         setApprovedInvoicesCount(json_res.approvedInvoicesCount);
