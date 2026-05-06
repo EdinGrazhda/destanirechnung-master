@@ -207,7 +207,11 @@ export const GET = async (req: NextRequest) => {
       );
     }
 
-    if (invoiceStatus === "paid" || invoiceStatus === "all" || invoiceStatus === "approved") {
+    if (
+      invoiceStatus === "paid" ||
+      invoiceStatus === "all" ||
+      invoiceStatus === "approved"
+    ) {
       const filteringMonthYearOptionParam = searchParams.get(
         "filteringMonthYearOptionParam",
       );

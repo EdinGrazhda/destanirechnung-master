@@ -452,15 +452,12 @@ const page = () => {
           <div
             className="dash-load-more"
             onClick={() => {
-              if (isLoadingMoreInvoices || !canLoadMoreApprovedInvoices)
-                return;
+              if (isLoadingMoreInvoices || !canLoadMoreApprovedInvoices) return;
               loadExtraApprovedInvoices(invoicesPageState + 1);
             }}
             style={{
               opacity:
-                isLoadingMoreInvoices || !canLoadMoreApprovedInvoices
-                  ? 0.6
-                  : 1,
+                isLoadingMoreInvoices || !canLoadMoreApprovedInvoices ? 0.6 : 1,
               pointerEvents:
                 isLoadingMoreInvoices || !canLoadMoreApprovedInvoices
                   ? "none"

@@ -14,8 +14,7 @@ const page = () => {
   const [invoicesPageState, setInvoicesPageState] = useState<number>(1);
   const [isLoadingMoreInvoices, setIsLoadingMoreInvoices] =
     useState<boolean>(false);
-  const [hasMorePaidInvoices, setHasMorePaidInvoices] =
-    useState<boolean>(true);
+  const [hasMorePaidInvoices, setHasMorePaidInvoices] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState("all");

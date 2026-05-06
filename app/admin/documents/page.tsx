@@ -68,7 +68,9 @@ const page = () => {
           ];
         });
         setInvoicesPageState(page);
-        setHasMoreDocumentsInvoices(nextInvoices.length === DOCUMENTS_PAGE_SIZE);
+        setHasMoreDocumentsInvoices(
+          nextInvoices.length === DOCUMENTS_PAGE_SIZE,
+        );
       } else {
         alert(json_res.message);
       }
