@@ -51,7 +51,12 @@ export async function connectDB() {
       });
   }
 
-  cached.conn = await cached.promise;
+  // Capture the promise into a local variable BEFORE awaiting it.
+  // The "disconnected" event handler above clears `cached.promise`; if we
+  // awaited `cached.promise` directly after that clear we would get `null`.
+  // Holding a local reference ensures we always await the promise we started.
+  const promise = cached.promise;
+  cached.conn = await promise;
   return cached.conn;
 }
 

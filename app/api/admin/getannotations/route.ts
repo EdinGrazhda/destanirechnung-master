@@ -67,7 +67,10 @@ export async function GET(request: NextRequest) {
     } else {
       const files = await fs.readdir(UPLOAD_DIR);
 
-      const filePattern = new RegExp(`^annotation_${safeBase}_p(\\d+)\\.png$`, "i");
+      const filePattern = new RegExp(
+        `^annotation_${safeBase}_p(\\d+)\\.png$`,
+        "i",
+      );
       const readTasks = files.map(async (file) => {
         const match = file.match(filePattern);
         if (!match) return;
