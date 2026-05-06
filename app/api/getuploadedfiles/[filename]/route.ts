@@ -18,7 +18,12 @@ const mimeTypes: Record<string, string> = {
 async function resolveRequestedFile(
   rawFilename: string,
 ): Promise<
-  | { ok: true; filename: string; normalizedFilePath: string; fileStat: Awaited<ReturnType<typeof fs.stat>> }
+  | {
+      ok: true;
+      filename: string;
+      normalizedFilePath: string;
+      fileStat: Awaited<ReturnType<typeof fs.stat>>;
+    }
   | { ok: false; response: NextResponse }
 > {
   const filename = (() => {

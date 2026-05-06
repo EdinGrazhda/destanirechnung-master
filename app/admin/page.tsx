@@ -412,7 +412,7 @@ const page = () => {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Link
-                    href={`/admin/pdf-editor?id=${inv._id}${inv.fileName ? `&file=${encodeURIComponent(inv.fileName)}` : ""}`}
+                    href={getPdfEditorHref(inv._id, inv.fileName)}
                     target="_blank"
                     className="dash-menu__item"
                   >
