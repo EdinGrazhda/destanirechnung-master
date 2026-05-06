@@ -18,6 +18,16 @@ const nextConfig: NextConfig = {
   // server worker from loading them and avoids the uncaughtException that was
   // causing the 52-second event-loop latency spikes.
   serverExternalPackages: ["pdfjs-dist", "pdf-lib", "canvas"],
+  // Exclude heavy browser-only packages from the file-system trace that Next.js
+  // runs after compilation. Without this the trace worker process tries to walk
+  // the entire pdfjs-dist tree, overflows its IPC buffer, and dies with ECONNRESET.
+  outputFileTracingExcludes: {
+    "*": [
+      "node_modules/pdfjs-dist/**/*",
+      "node_modules/pdf-lib/**/*",
+      "node_modules/canvas/**/*",
+    ],
+  },
   webpack(config, { isServer }) {
     if (isServer) {
       // Completely prevent pdfjs-dist and pdf-lib from being resolvable in the
