@@ -5,7 +5,7 @@
   "scripts": {
     "postinstall": "node -e \"try{const p=require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');require('fs').copyFileSync(p,'public/pdf.worker.min.mjs');console.log('pdfjs worker copied')}catch(e){console.warn('pdfjs worker copy failed:',e.message)}\"",
     "dev": "next dev --turbopack",
-    "build": "NODE_OPTIONS=--max-old-space-size=2048 next build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=2048 next build",
     "start": "next start",
     "lint": "next lint"
   },
@@ -28,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
     "tailwindcss": "^4",

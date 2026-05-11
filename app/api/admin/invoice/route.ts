@@ -17,7 +17,7 @@ const acceptedExtensions = ["png", "jpg", "jpeg", "pdf", "xls", "xlsx"];
 const uploadDir = path.join(process.cwd(), "public", "uploaded");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const invoiceListProjection =
-  "_id fileName textId company price status createdOn";
+  "_id fileName textId company price status createdOn comment";
 
 // Gives the route 30 s to respond; prevents nginx 502 on slow uploads.
 export const maxDuration = 30;
@@ -330,6 +330,57 @@ export const PUT = async (req: NextRequest) => {
     return NextResponse.json({ message: "Success" }, { status: 200 });
   } catch (error) {
     console.error("Invoice PUT error:", error);
+
+    return NextResponse.json(
+      { message: "Internal Server Error." },
+      { status: 500 },
+    );
+  }
+};
+
+export const PATCH = async (req: NextRequest) => {
+  try {
+    const { invoiceId, comment } = await req.json();
+
+    if (!invoiceId) {
+      return NextResponse.json(
+        { message: "Missing invoiceId." },
+        { status: 400 },
+      );
+    }
+
+    if (typeof comment !== "string") {
+      return NextResponse.json(
+        { message: "Comment must be a string." },
+        { status: 400 },
+      );
+    }
+
+    if (comment.length > 2000) {
+      return NextResponse.json(
+        { message: "Comment must not exceed 2000 characters." },
+        { status: 400 },
+      );
+    }
+
+    await connectDB();
+
+    const updated = await Invoice.findByIdAndUpdate(
+      invoiceId,
+      { $set: { comment: comment.trim() } },
+      { new: true },
+    ).lean();
+
+    if (!updated) {
+      return NextResponse.json(
+        { message: "Invoice not found." },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ message: "Success" }, { status: 200 });
+  } catch (error) {
+    console.error("Invoice PATCH error:", error);
 
     return NextResponse.json(
       { message: "Internal Server Error." },

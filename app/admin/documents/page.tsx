@@ -25,6 +25,11 @@ const page = () => {
     top: 0,
     left: 0,
   });
+  const [commentModalInvoice, setCommentModalInvoice] = useState<any | null>(
+    null,
+  );
+  const [commentDraft, setCommentDraft] = useState("");
+  const [isSavingComment, setIsSavingComment] = useState(false);
 
   const loadDocumentsInvoices = async () => {
     try {
@@ -118,6 +123,45 @@ const page = () => {
     } catch (err) {
       console.log(err);
       alert("Network Connectivity Issues.");
+    }
+  };
+
+  const openCommentModal = (inv: any) => {
+    setCommentModalInvoice(inv);
+    setCommentDraft(inv.comment || "");
+    setOpenMenuId(null);
+  };
+
+  const saveComment = async () => {
+    if (!commentModalInvoice) return;
+    setIsSavingComment(true);
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          invoiceId: commentModalInvoice._id,
+          comment: commentDraft,
+        }),
+      });
+      if (response.ok) {
+        setDocumentsInvoices((prev) =>
+          prev.map((inv) =>
+            inv._id === commentModalInvoice._id
+              ? { ...inv, comment: commentDraft.trim() }
+              : inv,
+          ),
+        );
+        setCommentModalInvoice(null);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch (err) {
+      console.log(err);
+      alert("Network Connectivity Issues.");
+    } finally {
+      setIsSavingComment(false);
     }
   };
 
@@ -403,6 +447,12 @@ const page = () => {
                     <i className="fa-regular fa-pen-to-square"></i> Anzeigen
                   </Link>
                   <div
+                    className="dash-menu__item"
+                    onClick={() => openCommentModal(inv)}
+                  >
+                    <i className="fa-regular fa-comment"></i> Kommentar
+                  </div>
+                  <div
                     className="dash-menu__item dash-menu__item--danger"
                     onClick={() => deleteInvoice(inv._id)}
                   >
@@ -434,6 +484,108 @@ const page = () => {
           </div>
         </div>
       </main>
+
+      {commentModalInvoice && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setCommentModalInvoice(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "480px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              style={{ marginBottom: "4px", fontSize: "16px", fontWeight: 600 }}
+            >
+              Kommentar
+            </h3>
+            <p
+              style={{ fontSize: "13px", color: "#888", marginBottom: "16px" }}
+            >
+              {commentModalInvoice.textId} — {commentModalInvoice.company}
+            </p>
+            <textarea
+              style={{
+                width: "100%",
+                minHeight: "120px",
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                fontSize: "14px",
+                resize: "vertical",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+              placeholder="Kommentar hinzufügen (optional)…"
+              value={commentDraft}
+              maxLength={2000}
+              onChange={(e) => setCommentDraft(e.target.value)}
+            />
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#aaa",
+                textAlign: "right",
+                marginBottom: "16px",
+              }}
+            >
+              {commentDraft.length}/2000
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+                onClick={() => setCommentModalInvoice(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "#1a1a1a",
+                  color: "#fff",
+                  cursor: isSavingComment ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  opacity: isSavingComment ? 0.6 : 1,
+                }}
+                onClick={saveComment}
+                disabled={isSavingComment}
+              >
+                {isSavingComment ? "Speichern…" : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

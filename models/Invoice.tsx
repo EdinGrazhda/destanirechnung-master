@@ -7,6 +7,7 @@ const InvoiceSchema = new mongoose.Schema({
   price: { type: Number, required: false },
   status: { type: String, required: false },
   createdOn: { type: String, required: false },
+  comment: { type: String, required: false, default: "" },
 });
 
 // Indexes to prevent full-collection scans on every query
