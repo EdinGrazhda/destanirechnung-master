@@ -42,6 +42,10 @@ const PDFEditorContent = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [clearRequested, setClearRequested] = useState(false);
   const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [commentSaved, setCommentSaved] = useState(false);
 
   const pageCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
   const annotationCanvasRefs = useRef<Record<number, HTMLCanvasElement | null>>(
@@ -719,449 +723,634 @@ const PDFEditorContent = () => {
     window.open(`${mergedPdfUrl}?t=${Date.now()}`, "_blank");
   };
 
+  const openCommentModal = async () => {
+    if (!invoiceId) return;
+    try {
+      const r = await fetch(
+        `/api/admin/invoice?invoiceId=${encodeURIComponent(invoiceId)}`,
+      );
+      const data = await r.json();
+      setCommentDraft(data.comment || "");
+    } catch {
+      setCommentDraft("");
+    }
+    setCommentModalOpen(true);
+  };
+
+  const saveComment = async () => {
+    if (!invoiceId) return;
+    setIsSavingComment(true);
+    try {
+      const response = await fetch("/api/admin/invoice", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invoiceId, comment: commentDraft }),
+      });
+      if (response.ok) {
+        setCommentModalOpen(false);
+        setCommentSaved(true);
+        setTimeout(() => setCommentSaved(false), 3000);
+      } else {
+        const json = await response.json();
+        alert(json.message);
+      }
+    } catch {
+      alert("Network Connectivity Issues.");
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "#2b2b2b",
-      }}
-    >
+    <>
       <div
         style={{
-          padding: "10px 20px",
-          backgroundColor: "#1e1e1e",
+          width: "100vw",
+          height: "100vh",
           display: "flex",
-          gap: "12px",
-          alignItems: "center",
-          borderBottom: "1px solid #444",
-          flexWrap: "wrap",
+          flexDirection: "column",
+          backgroundColor: "#2b2b2b",
         }}
       >
-        <h3 style={{ color: "white", margin: 0 }}>PDF Editor</h3>
-
         <div
           style={{
-            padding: "6px 12px",
-            backgroundColor:
-              saveStatus === "saved"
-                ? "#00aa00"
-                : saveStatus === "saving"
-                  ? "#0066cc"
-                  : "#555",
-            color: "white",
-            borderRadius: "4px",
-            fontSize: "12px",
+            padding: "10px 20px",
+            backgroundColor: "#1e1e1e",
             display: "flex",
+            gap: "12px",
             alignItems: "center",
-            gap: "5px",
+            borderBottom: "1px solid #444",
+            flexWrap: "wrap",
           }}
         >
-          {saveStatus === "saved" && "✓ Gespeichert"}
-          {saveStatus === "saving" && "⟳ Speichern..."}
-          {saveStatus === "idle" &&
-            (hasChanges ? "● Nicht gespeichert" : "○ Keine Änderungen")}
-        </div>
+          <h3 style={{ color: "white", margin: 0 }}>PDF Editor</h3>
 
-        {(!annotationsLoaded || isRendering) && (
           <div
             style={{
               padding: "6px 12px",
-              backgroundColor: "#0066cc",
+              backgroundColor:
+                saveStatus === "saved"
+                  ? "#00aa00"
+                  : saveStatus === "saving"
+                    ? "#0066cc"
+                    : "#555",
               color: "white",
               borderRadius: "4px",
               fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
             }}
           >
-            ⟳ Lade PDF...
+            {saveStatus === "saved" && "✓ Gespeichert"}
+            {saveStatus === "saving" && "⟳ Speichern..."}
+            {saveStatus === "idle" &&
+              (hasChanges ? "● Nicht gespeichert" : "○ Keine Änderungen")}
           </div>
-        )}
 
-        {pdfLoadError && (
-          <div
-            style={{
-              padding: "6px 12px",
-              backgroundColor: "#b71d18",
-              color: "white",
-              borderRadius: "4px",
-              fontSize: "12px",
-            }}
-          >
-            {pdfLoadError}
-          </div>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button
-            onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
-            style={{
-              padding: "6px 10px",
-              backgroundColor: "#444",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            ◀
-          </button>
-
-          <span
-            style={{ color: "white", minWidth: "64px", textAlign: "center" }}
-          >
-            {currentPage} / {numPages || 1}
-          </span>
-
-          <button
-            onClick={() =>
-              scrollToPage(Math.min(numPages || 1, currentPage + 1))
-            }
-            style={{
-              padding: "6px 10px",
-              backgroundColor: "#444",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            ▶
-          </button>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button
-            onClick={() =>
-              setZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))
-            }
-            disabled={isRendering}
-            style={{
-              padding: "6px 10px",
-              backgroundColor: "#444",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: isRendering ? "not-allowed" : "pointer",
-            }}
-          >
-            -
-          </button>
-
-          <span
-            style={{ color: "white", minWidth: "54px", textAlign: "center" }}
-          >
-            {Math.round(zoom * 100)}%
-          </span>
-
-          <button
-            onClick={() =>
-              setZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))
-            }
-            disabled={isRendering}
-            style={{
-              padding: "6px 10px",
-              backgroundColor: "#444",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: isRendering ? "not-allowed" : "pointer",
-            }}
-          >
-            +
-          </button>
-        </div>
-
-        <div style={{ marginLeft: "auto" }} />
-
-        <button
-          onClick={() => setDrawMode(!drawMode)}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: drawMode ? "#00aa00" : "#666",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            fontSize: "14px",
-          }}
-          title={
-            drawMode ? "Klicken fur Scrollmodus" : "Klicken fur Zeichenmodus"
-          }
-        >
-          {drawMode ? "✏️ Zeichenmodus" : "👆 Scrollmodus"}
-        </button>
-
-        <button
-          onClick={() => setTool("pen")}
-          disabled={!drawMode}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: !drawMode
-              ? "#333"
-              : tool === "pen"
-                ? "#0066cc"
-                : "#444",
-            color: !drawMode ? "#666" : "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: !drawMode ? "not-allowed" : "pointer",
-          }}
-        >
-          ✏️ Stift
-        </button>
-
-        <button
-          onClick={() => setTool("eraser")}
-          disabled={!drawMode}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: !drawMode
-              ? "#333"
-              : tool === "eraser"
-                ? "#0066cc"
-                : "#444",
-            color: !drawMode ? "#666" : "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: !drawMode ? "not-allowed" : "pointer",
-          }}
-        >
-          🧹 Radierer
-        </button>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <label style={{ color: !drawMode ? "#666" : "white" }}>Farbe:</label>
-
-          <input
-            type="color"
-            value={drawColor}
-            onChange={(e) => setDrawColor(e.target.value)}
-            disabled={!drawMode}
-            style={{
-              width: "40px",
-              height: "30px",
-              cursor: !drawMode ? "not-allowed" : "pointer",
-              opacity: !drawMode ? 0.5 : 1,
-            }}
-          />
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <label style={{ color: !drawMode ? "#666" : "white" }}>Breite:</label>
-
-          <input
-            type="range"
-            min="1"
-            max="10"
-            value={lineWidth}
-            onChange={(e) => setLineWidth(Number(e.target.value))}
-            disabled={!drawMode}
-            style={{
-              width: "100px",
-              cursor: !drawMode ? "not-allowed" : "pointer",
-              opacity: !drawMode ? 0.5 : 1,
-            }}
-          />
-
-          <span
-            style={{ color: !drawMode ? "#666" : "white", minWidth: "30px" }}
-          >
-            {lineWidth}px
-          </span>
-        </div>
-
-        <button
-          onClick={clearCanvas}
-          disabled={!drawMode}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: !drawMode ? "#333" : "#cc6600",
-            color: !drawMode ? "#666" : "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: !drawMode ? "not-allowed" : "pointer",
-          }}
-        >
-          🗑️ Loschen
-        </button>
-
-        <button
-          onClick={() => savePDF(false)}
-          disabled={saving || !hasChanges}
-          style={{
-            padding: "8px 20px",
-            backgroundColor: saving || !hasChanges ? "#555" : "#00aa00",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: saving || !hasChanges ? "not-allowed" : "pointer",
-            fontWeight: "bold",
-          }}
-          title="Sofort speichern (Auto-Speicherung ist aktiviert)"
-        >
-          {saving ? "💾 Speichern..." : "💾 Jetzt Speichern"}
-        </button>
-
-        <button
-          onClick={downloadMergedPDF}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#2f6cbe",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          ⬇️ Download
-        </button>
-
-        <button
-          onClick={printMergedPDF}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#3b3b3b",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          🖨️ Print
-        </button>
-
-        <button
-          onClick={() => window.close()}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#cc0000",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          ✖️ SchlieBen
-        </button>
-      </div>
-
-      <div style={{ flex: 1, position: "relative", display: "flex" }}>
-        <div
-          style={{
-            width: "190px",
-            backgroundColor: "#2b2d33",
-            borderRight: "1px solid #444",
-            overflowY: "auto",
-            padding: "12px 10px",
-          }}
-        >
-          {pageNumbers.map((pageNum) => (
-            <button
-              key={`thumb-${pageNum}`}
-              onClick={() => scrollToPage(pageNum)}
+          {(!annotationsLoaded || isRendering) && (
+            <div
               style={{
-                width: "100%",
-                border:
-                  currentPage === pageNum
-                    ? "2px solid #3b82f6"
-                    : "1px solid #555",
-                backgroundColor: "#1f232b",
-                borderRadius: "6px",
-                padding: "8px",
-                marginBottom: "12px",
+                padding: "6px 12px",
+                backgroundColor: "#0066cc",
+                color: "white",
+                borderRadius: "4px",
+                fontSize: "12px",
+              }}
+            >
+              ⟳ Lade PDF...
+            </div>
+          )}
+
+          {pdfLoadError && (
+            <div
+              style={{
+                padding: "6px 12px",
+                backgroundColor: "#b71d18",
+                color: "white",
+                borderRadius: "4px",
+                fontSize: "12px",
+              }}
+            >
+              {pdfLoadError}
+            </div>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
+              style={{
+                padding: "6px 10px",
+                backgroundColor: "#444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
                 cursor: "pointer",
               }}
             >
-              <canvas
-                ref={(el) => {
-                  thumbCanvasRefs.current[pageNum] = el;
-                }}
-                style={{
-                  display: "block",
-                  margin: "0 auto",
-                  background: "white",
-                }}
-              />
-
-              <div
-                style={{ color: "white", fontSize: "12px", marginTop: "6px" }}
-              >
-                {pageNum}
-              </div>
+              ◀
             </button>
-          ))}
+
+            <span
+              style={{ color: "white", minWidth: "64px", textAlign: "center" }}
+            >
+              {currentPage} / {numPages || 1}
+            </span>
+
+            <button
+              onClick={() =>
+                scrollToPage(Math.min(numPages || 1, currentPage + 1))
+              }
+              style={{
+                padding: "6px 10px",
+                backgroundColor: "#444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              ▶
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              onClick={() =>
+                setZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))
+              }
+              disabled={isRendering}
+              style={{
+                padding: "6px 10px",
+                backgroundColor: "#444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: isRendering ? "not-allowed" : "pointer",
+              }}
+            >
+              -
+            </button>
+
+            <span
+              style={{ color: "white", minWidth: "54px", textAlign: "center" }}
+            >
+              {Math.round(zoom * 100)}%
+            </span>
+
+            <button
+              onClick={() =>
+                setZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))
+              }
+              disabled={isRendering}
+              style={{
+                padding: "6px 10px",
+                backgroundColor: "#444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: isRendering ? "not-allowed" : "pointer",
+              }}
+            >
+              +
+            </button>
+          </div>
+
+          <div style={{ marginLeft: "auto" }} />
+
+          <button
+            onClick={() => setDrawMode(!drawMode)}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: drawMode ? "#00aa00" : "#666",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "14px",
+            }}
+            title={
+              drawMode ? "Klicken fur Scrollmodus" : "Klicken fur Zeichenmodus"
+            }
+          >
+            {drawMode ? "✏️ Zeichenmodus" : "👆 Scrollmodus"}
+          </button>
+
+          <button
+            onClick={() => setTool("pen")}
+            disabled={!drawMode}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: !drawMode
+                ? "#333"
+                : tool === "pen"
+                  ? "#0066cc"
+                  : "#444",
+              color: !drawMode ? "#666" : "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: !drawMode ? "not-allowed" : "pointer",
+            }}
+          >
+            ✏️ Stift
+          </button>
+
+          <button
+            onClick={() => setTool("eraser")}
+            disabled={!drawMode}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: !drawMode
+                ? "#333"
+                : tool === "eraser"
+                  ? "#0066cc"
+                  : "#444",
+              color: !drawMode ? "#666" : "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: !drawMode ? "not-allowed" : "pointer",
+            }}
+          >
+            🧹 Radierer
+          </button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <label style={{ color: !drawMode ? "#666" : "white" }}>
+              Farbe:
+            </label>
+
+            <input
+              type="color"
+              value={drawColor}
+              onChange={(e) => setDrawColor(e.target.value)}
+              disabled={!drawMode}
+              style={{
+                width: "40px",
+                height: "30px",
+                cursor: !drawMode ? "not-allowed" : "pointer",
+                opacity: !drawMode ? 0.5 : 1,
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <label style={{ color: !drawMode ? "#666" : "white" }}>
+              Breite:
+            </label>
+
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={lineWidth}
+              onChange={(e) => setLineWidth(Number(e.target.value))}
+              disabled={!drawMode}
+              style={{
+                width: "100px",
+                cursor: !drawMode ? "not-allowed" : "pointer",
+                opacity: !drawMode ? 0.5 : 1,
+              }}
+            />
+
+            <span
+              style={{ color: !drawMode ? "#666" : "white", minWidth: "30px" }}
+            >
+              {lineWidth}px
+            </span>
+          </div>
+
+          <button
+            onClick={clearCanvas}
+            disabled={!drawMode}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: !drawMode ? "#333" : "#cc6600",
+              color: !drawMode ? "#666" : "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: !drawMode ? "not-allowed" : "pointer",
+            }}
+          >
+            🗑️ Loschen
+          </button>
+
+          <button
+            onClick={() => savePDF(false)}
+            disabled={saving || !hasChanges}
+            style={{
+              padding: "8px 20px",
+              backgroundColor: saving || !hasChanges ? "#555" : "#00aa00",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: saving || !hasChanges ? "not-allowed" : "pointer",
+              fontWeight: "bold",
+            }}
+            title="Sofort speichern (Auto-Speicherung ist aktiviert)"
+          >
+            {saving ? "💾 Speichern..." : "💾 Jetzt Speichern"}
+          </button>
+
+          <button
+            onClick={downloadMergedPDF}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#2f6cbe",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            ⬇️ Download
+          </button>
+
+          <button
+            onClick={printMergedPDF}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#3b3b3b",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            🖨️ Print
+          </button>
+
+          {invoiceId && (
+            <button
+              onClick={openCommentModal}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#6b4c9a",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              💬 Kommentar
+            </button>
+          )}
+
+          <button
+            onClick={() => window.close()}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#cc0000",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            ✖️ SchlieBen
+          </button>
         </div>
 
-        <div
-          ref={mainScrollRef}
-          style={{
-            flex: 1,
-            overflow: "auto",
-            backgroundColor: "#525252",
-            padding: "20px",
-          }}
-        >
+        <div style={{ flex: 1, position: "relative", display: "flex" }}>
           <div
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
+              width: "190px",
+              backgroundColor: "#2b2d33",
+              borderRight: "1px solid #444",
+              overflowY: "auto",
+              padding: "12px 10px",
             }}
           >
             {pageNumbers.map((pageNum) => (
-              <div
-                key={`page-${pageNum}`}
-                ref={(el) => {
-                  pageWrapperRefs.current[pageNum] = el;
-                }}
+              <button
+                key={`thumb-${pageNum}`}
+                onClick={() => scrollToPage(pageNum)}
                 style={{
-                  position: "relative",
-                  marginBottom: "16px",
-                  backgroundColor: "white",
+                  width: "100%",
+                  border:
+                    currentPage === pageNum
+                      ? "2px solid #3b82f6"
+                      : "1px solid #555",
+                  backgroundColor: "#1f232b",
+                  borderRadius: "6px",
+                  padding: "8px",
+                  marginBottom: "12px",
+                  cursor: "pointer",
                 }}
               >
                 <canvas
                   ref={(el) => {
-                    pageCanvasRefs.current[pageNum] = el;
+                    thumbCanvasRefs.current[pageNum] = el;
                   }}
-                  style={{ display: "block" }}
+                  style={{
+                    display: "block",
+                    margin: "0 auto",
+                    background: "white",
+                  }}
                 />
 
-                <canvas
-                  ref={(el) => {
-                    annotationCanvasRefs.current[pageNum] = el;
-                  }}
-                  onMouseDown={(e) => startDrawing(pageNum, e)}
-                  onMouseMove={(e) => draw(pageNum, e)}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    cursor: drawMode
-                      ? tool === "pen"
-                        ? "crosshair"
-                        : "pointer"
-                      : "default",
-                    pointerEvents: drawMode ? "auto" : "none",
-                    touchAction: "none",
-                    border:
-                      drawMode && currentPage === pageNum
-                        ? "2px solid rgba(0, 160, 0, 0.5)"
-                        : "none",
-                  }}
-                />
-              </div>
+                <div
+                  style={{ color: "white", fontSize: "12px", marginTop: "6px" }}
+                >
+                  {pageNum}
+                </div>
+              </button>
             ))}
+          </div>
+
+          <div
+            ref={mainScrollRef}
+            style={{
+              flex: 1,
+              overflow: "auto",
+              backgroundColor: "#525252",
+              padding: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}
+            >
+              {pageNumbers.map((pageNum) => (
+                <div
+                  key={`page-${pageNum}`}
+                  ref={(el) => {
+                    pageWrapperRefs.current[pageNum] = el;
+                  }}
+                  style={{
+                    position: "relative",
+                    marginBottom: "16px",
+                    backgroundColor: "white",
+                  }}
+                >
+                  <canvas
+                    ref={(el) => {
+                      pageCanvasRefs.current[pageNum] = el;
+                    }}
+                    style={{ display: "block" }}
+                  />
+
+                  <canvas
+                    ref={(el) => {
+                      annotationCanvasRefs.current[pageNum] = el;
+                    }}
+                    onMouseDown={(e) => startDrawing(pageNum, e)}
+                    onMouseMove={(e) => draw(pageNum, e)}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      cursor: drawMode
+                        ? tool === "pen"
+                          ? "crosshair"
+                          : "pointer"
+                        : "default",
+                      pointerEvents: drawMode ? "auto" : "none",
+                      touchAction: "none",
+                      border:
+                        drawMode && currentPage === pageNum
+                          ? "2px solid rgba(0, 160, 0, 0.5)"
+                          : "none",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {commentSaved && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "32px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#22c55e",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            fontSize: "14px",
+            fontWeight: 600,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+            zIndex: 3000,
+            pointerEvents: "none",
+          }}
+        >
+          ✓ Kommentar gespeichert
+        </div>
+      )}
+
+      {commentModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2000,
+          }}
+          onClick={() => setCommentModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "480px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.28)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              style={{ marginBottom: "4px", fontSize: "16px", fontWeight: 600 }}
+            >
+              Kommentar
+            </h3>
+            <p
+              style={{ fontSize: "13px", color: "#888", marginBottom: "16px" }}
+            >
+              {invoiceId}
+            </p>
+            <textarea
+              style={{
+                width: "100%",
+                minHeight: "120px",
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                fontSize: "14px",
+                resize: "vertical",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+              placeholder="Kommentar hinzufügen (optional)…"
+              value={commentDraft}
+              maxLength={2000}
+              onChange={(e) => setCommentDraft(e.target.value)}
+            />
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#aaa",
+                textAlign: "right",
+                marginBottom: "16px",
+              }}
+            >
+              {commentDraft.length}/2000
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <button
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+                onClick={() => setCommentModalOpen(false)}
+              >
+                Abbrechen
+              </button>
+              <button
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "#1a1a1a",
+                  color: "#fff",
+                  cursor: isSavingComment ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  opacity: isSavingComment ? 0.6 : 1,
+                }}
+                onClick={saveComment}
+                disabled={isSavingComment}
+              >
+                {isSavingComment ? "Speichern…" : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

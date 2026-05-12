@@ -392,6 +392,7 @@ const page = () => {
                   <th className="dash-th">Id</th>
                   <th className="dash-th">Preis</th>
                   <th className="dash-th">Datum</th>
+                  <th className="dash-th">Kommentar</th>
                   <th className="dash-th dash-th--act"></th>
                 </tr>
               </thead>
@@ -441,6 +442,26 @@ const page = () => {
                     <td className="dash-td">{inv.textId}</td>
                     <td className="dash-td">{formatPrice(inv.price)}</td>
                     <td className="dash-td">{formatDate(inv.createdOn)}</td>
+                    <td className="dash-td">
+                      {inv.comment ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "12px",
+                            color: "#6b4c9a",
+                            fontWeight: 500,
+                          }}
+                        >
+                          <i className="fa-regular fa-comment"></i> Ja
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#aaa" }}>
+                          —
+                        </span>
+                      )}
+                    </td>
                     <td className="dash-td dash-td--act">
                       <div
                         className="dash-menu"
@@ -505,12 +526,6 @@ const page = () => {
                     onClick={() => approveInvoice(inv._id)}
                   >
                     <i className="fa-regular fa-circle-check"></i> Genehmigen
-                  </div>
-                  <div
-                    className="dash-menu__item"
-                    onClick={() => openCommentModal(inv)}
-                  >
-                    <i className="fa-regular fa-comment"></i> Kommentar
                   </div>
                   <div
                     className="dash-menu__item dash-menu__item--danger"

@@ -163,7 +163,7 @@ export const GET = async (req: NextRequest) => {
     const invoiceId = searchParams.get("invoiceId");
     if (invoiceId) {
       const invoice = await Invoice.findById(invoiceId)
-        .select("fileName")
+        .select("fileName comment")
         .lean();
       if (!invoice) {
         return NextResponse.json(
@@ -172,9 +172,13 @@ export const GET = async (req: NextRequest) => {
         );
       }
       const fileName = (invoice as any).fileName;
+      const comment = (invoice as any).comment ?? "";
 
       return NextResponse.json(
-        { fileName: isSafePdfFilename(fileName) ? fileName : null },
+        {
+          fileName: isSafePdfFilename(fileName) ? fileName : null,
+          comment,
+        },
         { status: 200 },
       );
     }
