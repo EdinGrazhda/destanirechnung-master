@@ -107,8 +107,8 @@ const PDFEditorContent = () => {
   useEffect(() => {
     if (isSafePdfFilename(filename)) {
       const safeName = encodeURIComponent(filename as string);
-      setPdfUrl(`/uploaded/${safeName}`);
-      setMergedPdfUrl(`/uploaded/${safeName}`);
+      setPdfUrl(`/api/getuploadedfiles/${safeName}`);
+      setMergedPdfUrl(`/api/getuploadedfiles/${safeName}`);
       setPdfLoadError(null);
       return;
     }
@@ -631,7 +631,7 @@ const PDFEditorContent = () => {
     if (url.includes("..")) return false;
     if (url.includes("\\")) return false;
     if (!url.includes(".pdf")) return false;
-    if (!url.startsWith("/uploaded/")) return false;
+    if (!url.startsWith("/api/getuploadedfiles/")) return false;
 
     return true;
   };
