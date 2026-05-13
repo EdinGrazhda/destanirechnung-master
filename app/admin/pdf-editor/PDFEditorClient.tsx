@@ -631,7 +631,7 @@ const PDFEditorContent = () => {
     if (url.includes("..")) return false;
     if (url.includes("\\")) return false;
     if (!url.includes(".pdf")) return false;
-    if (!url.startsWith("/api/getUploaded")) return false;
+    if (!url.startsWith("/api/getUploaded?")) return false;
 
     return true;
   };
